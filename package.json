@@ -13,7 +13,8 @@
     "staff:promote": "npm run staff:promote --workspace=memorial-map-backend --",
     "admin:seed": "npm run admin:seed --workspace=memorial-map-backend",
     "admin:promote": "npm run admin:promote --workspace=memorial-map-backend --",
-    "admin:change-email": "npm run admin:change-email --workspace=memorial-map-backend --"
+    "admin:change-email": "npm run admin:change-email --workspace=memorial-map-backend --",
+    "admin:reset-password": "npm run admin:reset-password --workspace=memorial-map-backend --"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

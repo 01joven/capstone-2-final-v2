@@ -70,6 +70,11 @@ const createPayment = async (req, res) => {
       transactionStarted = false;
       return res.status(404).json({ message: 'Reservation not found.' });
     }
+    if (reservation.rows[0].plot_section) {
+      await client.query('ROLLBACK');
+      transactionStarted = false;
+      return res.status(400).json({ message: 'Plot reservations do not use online payments; a staff member will review your request.' });
+    }
     if (reservation.rows[0].status === 'confirmed') {
       await client.query('ROLLBACK');
       transactionStarted = false;

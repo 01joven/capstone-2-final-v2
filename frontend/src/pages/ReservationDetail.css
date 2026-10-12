@@ -48,6 +48,10 @@
   padding: 20px;
 }
 
+.reservation-item.plot-reservation-item {
+  grid-template-columns: 1fr;
+}
+
 .reservation-item img {
   width: 100%;
   height: 120px;

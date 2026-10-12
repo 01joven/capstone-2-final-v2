@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { paymentAPI, reservationAPI } from '../services/api';
+import usePolling from '../hooks/usePolling';
 import './Payments.css';
 
 const formatDate = (date) => new Date(date).toLocaleDateString();
@@ -48,6 +49,16 @@ const Payments = () => {
     }
   }, [canReviewPayments]);
 
+  const refreshPaymentData = useCallback(async () => {
+    try {
+      await Promise.all([loadPayments(), loadPendingVerifications()]);
+    } catch (refreshError) {
+      setError(refreshError.response?.data?.message || 'Could not refresh payment status.');
+    }
+  }, [loadPayments, loadPendingVerifications]);
+
+  usePolling(refreshPaymentData);
+
   useEffect(() => {
     const loadPage = async () => {
       setIsLoading(true);
@@ -64,25 +75,6 @@ const Payments = () => {
 
     loadPage();
   }, [loadPayments, loadPendingVerifications]);
-
-  useEffect(() => {
-    if (pendingReservation?.payment_status !== 'pending_verification') return undefined;
-
-    const interval = window.setInterval(async () => {
-      try {
-        const { data } = await reservationAPI.getUserReservations();
-        const latestReservation = data.find((reservation) => reservation.id === pendingReservation.id);
-        if (latestReservation && latestReservation.payment_status !== 'pending_verification') {
-          setPendingReservation(latestReservation);
-          await loadPayments();
-        }
-      } catch (refreshError) {
-        setError(refreshError.response?.data?.message || 'Could not refresh reservation payment status.');
-      }
-    }, 10000);
-
-    return () => window.clearInterval(interval);
-  }, [pendingReservation, loadPayments]);
 
   const handleSubmitPayment = async (event) => {
     event.preventDefault();

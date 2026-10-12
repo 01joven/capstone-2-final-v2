@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { burialAPI } from '../services/api';
+import usePolling from '../hooks/usePolling';
 
 const formatDate = (date) => {
   if (!date) return 'Not provided';
@@ -15,30 +16,33 @@ const MemorialRecord = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    const loadRecord = async () => {
-      setLoading(true);
-      setError('');
-      setRecord(null);
-      try {
-        const { data } = await burialAPI.getAll({
-          search: `MR-${String(id).padStart(4, '0')}`,
-          cemetery: 'Cogon Cemetery',
-        });
-        const matchingRecord = (Array.isArray(data) ? data : []).find((entry) => String(entry.id) === String(id));
-        if (!matchingRecord) {
-          setError('No memorial record was found for this ID.');
-          return;
-        }
-        setRecord(matchingRecord);
-      } catch (loadError) {
-        setError(loadError.response?.data?.message || 'Could not load this memorial record.');
-      } finally {
-        setLoading(false);
+  const loadRecord = useCallback(async () => {
+    setError('');
+    try {
+      const { data } = await burialAPI.getAll({
+        search: `MR-${String(id).padStart(4, '0')}`,
+        cemetery: 'Cogon Cemetery',
+      });
+      const matchingRecord = (Array.isArray(data) ? data : []).find((entry) => String(entry.id) === String(id));
+      if (!matchingRecord) {
+        setError('No memorial record was found for this ID.');
+        return;
       }
-    };
-    loadRecord();
+      setRecord(matchingRecord);
+    } catch (loadError) {
+      setError(loadError.response?.data?.message || 'Could not load this memorial record.');
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
+
+  useEffect(() => {
+    setLoading(true);
+    setRecord(null);
+    loadRecord();
+  }, [id, loadRecord]);
+
+  usePolling(loadRecord);
 
   return (
     <Layout>

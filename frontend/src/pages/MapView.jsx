@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import { Link, useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout';
-import { burialAPI, favoriteAPI, memorialAPI } from '../services/api';
+import { burialAPI, favoriteAPI, memorialAPI, reservationAPI } from '../services/api';
+import usePolling from '../hooks/usePolling';
 import './MapView.css';
 
 delete L.Icon.Default.prototype._getIconUrl;
@@ -31,38 +32,43 @@ const MapView = () => {
   const [savedItems, setSavedItems] = useState({});
   const [savingMemorialId, setSavingMemorialId] = useState(null);
   const [burials, setBurials] = useState([]);
+  const [plotReservations, setPlotReservations] = useState([]);
   const [selectedBurialId, setSelectedBurialId] = useState(null);
+  const [selectedPlot, setSelectedPlot] = useState(null);
   const [activeView, setActiveView] = useState('plots');
   const [siteMapMode, setSiteMapMode] = useState('cogon');
   const [search, setSearch] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const loadMapData = async () => {
-      setIsLoading(true);
+  const loadMapData = useCallback(async () => {
+    try {
+      const [burialResponse, memorialResponse, savedResponse, plotReservationResponse] = await Promise.all([
+        burialAPI.getAll({ cemetery: 'Cogon Cemetery' }),
+        memorialAPI.getAll(),
+        favoriteAPI.getAll(),
+        reservationAPI.getPlotReservations(),
+      ]);
+      setBurials(burialResponse.data);
+      setMemorials(memorialResponse.data);
+      setPlotReservations(plotReservationResponse.data);
+      setSavedItems(Object.fromEntries(savedResponse.data.map((item) => [
+        item.id,
+        { savedId: item.saved_id },
+      ])));
       setError('');
-      try {
-        const [burialResponse, memorialResponse, savedResponse] = await Promise.all([
-          burialAPI.getAll({ cemetery: 'Cogon Cemetery' }),
-          memorialAPI.getAll(),
-          favoriteAPI.getAll(),
-        ]);
-        setBurials(burialResponse.data);
-        setMemorials(memorialResponse.data);
-        setSavedItems(Object.fromEntries(savedResponse.data.map((item) => [
-          item.id,
-          { savedId: item.saved_id },
-        ])));
-      } catch (loadError) {
-        setError(loadError.response?.data?.message || 'Could not load map data. Please try again.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadMapData();
+    } catch (loadError) {
+      setError(loadError.response?.data?.message || 'Could not load map data. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadMapData();
+  }, [loadMapData]);
+
+  usePolling(loadMapData);
 
   useEffect(() => {
     const burialId = Number(searchParams.get('burialId'));
@@ -87,8 +93,12 @@ const MapView = () => {
   }, [burials, search]);
 
   const sections = useMemo(
-    () => [...new Set([...SECTIONS, ...burials.map((burial) => burial.section).filter(Boolean)])].sort(),
-    [burials]
+    () => [...new Set([
+      ...SECTIONS,
+      ...burials.map((burial) => burial.section).filter(Boolean),
+      ...plotReservations.map((reservation) => reservation.plot_section).filter(Boolean),
+    ])].sort(),
+    [burials, plotReservations]
   );
   const selectedBurial = burials.find((burial) => burial.id === selectedBurialId);
   const unmappedBurials = visibleBurials.filter((burial) => !burial.section);
@@ -156,7 +166,7 @@ const MapView = () => {
             <div className="plot-map-toolbar card">
               <div>
                 <h2>Cogon Cemetery, Cordova</h2>
-                <p>Choose a plot to view its memorial record.</p>
+                <p>Choose a vacant plot to request a reservation.</p>
               </div>
               <input
                 type="search"
@@ -175,7 +185,7 @@ const MapView = () => {
             <div className="plot-map-legend" aria-label="Plot status legend">
               <span><i className="plot-legend-dot occupied" /> Occupied</span>
               <span><i className="plot-legend-dot available" /> Available</span>
-              <span><i className="plot-legend-dot reserved" /> Reserved (not linked)</span>
+              <span><i className="plot-legend-dot reserved" /> Reserved</span>
             </div>
 
             {isLoading ? (
@@ -187,7 +197,10 @@ const MapView = () => {
                     const sectionBurials = burials.filter((burial) => burial.section === section);
                     const plotCount = Math.max(
                       BASE_PLOTS_PER_SECTION,
-                      ...sectionBurials.map((burial) => burial.lot_number || 0)
+                      ...sectionBurials.map((burial) => burial.lot_number || 0),
+                      ...plotReservations
+                        .filter((reservation) => reservation.plot_section === section)
+                        .map((reservation) => Number(reservation.plot_number) || 0)
                     );
 
                     return (
@@ -198,18 +211,41 @@ const MapView = () => {
                             const lotNumber = index + 1;
                             const burial = sectionBurials.find((record) => record.lot_number === lotNumber);
                             const plotReference = `${section}-${String(lotNumber).padStart(2, '0')}`;
+                            const plotReservation = plotReservations.find((reservation) =>
+                              reservation.plot_section === section && Number(reservation.plot_number) === lotNumber
+                            );
                             const isSelected = burial?.id === selectedBurialId;
                             const isSearchMatch = burial && visibleBurials.some((record) => record.id === burial.id);
+                            const isSelectedPlot = selectedPlot?.section === section && selectedPlot?.lotNumber === lotNumber;
+                            const isReserved = Boolean(plotReservation);
+                            const plotStatus = burial ? 'occupied' : isReserved ? 'reserved' : 'available';
 
                             return (
                               <button
                                 type="button"
                                 key={plotReference}
-                                className={`plot-cell ${burial ? 'occupied' : 'available'} ${isSelected ? 'selected' : ''} ${search && isSearchMatch ? 'search-match' : ''}`}
-                                aria-label={burial ? `${plotReference}, occupied by ${burial.full_name}` : `${plotReference}, available`}
-                                title={burial ? `${burial.full_name}${burial.location_is_demo ? ' (demo location)' : ''}` : `${plotReference} · Available`}
-                                onClick={() => burial && selectBurial(burial)}
-                                disabled={!burial}
+                                className={`plot-cell ${plotStatus} ${isSelected || isSelectedPlot ? 'selected' : ''} ${search && isSearchMatch ? 'search-match' : ''}`}
+                                aria-label={burial
+                                  ? `${plotReference}, occupied by ${burial.full_name}`
+                                  : isReserved
+                                    ? `${plotReference}, reserved`
+                                    : `${plotReference}, available`}
+                                title={burial
+                                  ? `${burial.full_name}${burial.location_is_demo ? ' (demo location)' : ''}`
+                                  : isReserved
+                                    ? `${plotReference} · ${plotReservation.status === 'pending' ? 'Request pending review' : 'Reserved'}`
+                                    : `${plotReference} · Available`}
+                                onClick={() => {
+                                  if (burial) {
+                                    setSelectedPlot(null);
+                                    selectBurial(burial);
+                                  } else if (!isReserved) {
+                                    setSelectedBurialId(null);
+                                    setSearchParams({});
+                                    setSelectedPlot({ section, lotNumber });
+                                  }
+                                }}
+                                disabled={isReserved}
                               >
                                 <span>{plotReference}</span>
                                 {burial?.location_is_demo && <small>Demo</small>}
@@ -248,6 +284,25 @@ const MapView = () => {
                         Sample / Demo Data — this record has not been marked as verified and authorized.
                       </p>
                     )}
+                  </article>
+                )}
+
+                {selectedPlot && (
+                  <article className="memorial-information card" aria-live="polite">
+                    <div className="memorial-information-heading">
+                      <div>
+                        <p className="record-id">Vacant cemetery plot</p>
+                        <h2>Section {selectedPlot.section}, Plot {String(selectedPlot.lotNumber).padStart(2, '0')}</h2>
+                      </div>
+                      <span className="badge">Available</span>
+                    </div>
+                    <p>Plot requests are held while pending and require staff approval. No online payment is collected for plot reservations.</p>
+                    <Link
+                      className="btn btn-primary"
+                      to={`/reservations/plot/${selectedPlot.section}/${selectedPlot.lotNumber}`}
+                    >
+                      Request this plot
+                    </Link>
                   </article>
                 )}
 

@@ -9,7 +9,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const mime = { '.html':'text/html','.js':'text/javascript','.css':'text/css','.png':'image/png','.svg':'image/svg+xml','.json':'application/json','.ico':'image/x-icon' };
 const server = http.createServer((req, res) => {
   if (req.url.startsWith('/api')) {
-    const p = http.request({ hostname:'localhost', port:5001, path:req.url, method:req.method, headers:req.headers }, (pr) => { res.writeHead(pr.statusCode, pr.headers); pr.pipe(res); });
+    const p = http.request({ hostname:'localhost', port:5000, path:req.url, method:req.method, headers:req.headers }, (pr) => { res.writeHead(pr.statusCode, pr.headers); pr.pipe(res); });
     p.on('error', () => { res.writeHead(502); res.end('proxy error'); });
     req.pipe(p); return;
   }
@@ -23,7 +23,7 @@ const server = http.createServer((req, res) => {
   const errors = []; let ch;
   try {
     await new Promise((r) => server.listen(4100, r));
-    const post = async (u, b) => { const r = await fetch('http://localhost:5001' + u, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(b) }); return r.json(); };
+    const post = async (u, b) => { const r = await fetch('http://localhost:5000' + u, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(b) }); return r.json(); };
     const a = await post('/api/auth/admin/login', { email:'admin@example.com', password:'StrongPassword123' });
     const profile = path.join(process.env.TEMP, 'mm-chrome-staff-' + Date.now());
     ch = spawn('C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', ['--headless=new','--disable-gpu','--no-first-run','--no-default-browser-check','--remote-debugging-port=9344','--user-data-dir=' + profile,'about:blank'], { stdio:'ignore' });

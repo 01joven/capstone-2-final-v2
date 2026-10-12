@@ -26,7 +26,6 @@ const changeAdminEmail = async () => {
       'UPDATE users SET email = $1, auth_version = auth_version + 1 WHERE id = $2',
       [newEmail, admin.rows[0].id]
     );
-    await client.query('DELETE FROM admin_recovery_codes WHERE email = $1', [oldEmail]);
     await client.query('COMMIT');
     console.log(`Administrator email updated to ${newEmail}; prior sessions have been revoked.`);
   } catch (error) {

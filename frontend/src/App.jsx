@@ -13,9 +13,7 @@ import Saved from './pages/Saved';
 import Profile from './pages/Profile';
 import AdminLogin from './pages/AdminLogin';
 import StaffLogin from './pages/StaffLogin';
-import StaffRegister from './pages/StaffRegister';
-import AdminRecovery from './pages/AdminRecovery';
-import AdminSecurity from './pages/AdminSecurity';
+import PasswordRecovery from './pages/PasswordRecovery';
 import AdminPortal from './pages/AdminPortal';
 import MemorialRecord from './pages/MemorialRecord';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -29,14 +27,17 @@ function App() {
         <Route path="/register" element={<Register />} />
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/staff/login" element={<StaffLogin />} />
-        <Route path="/staff/register" element={<StaffRegister />} />
-        <Route path="/admin/recovery" element={<AdminRecovery />} />
+        <Route path="/staff/register" element={<Navigate to="/staff/login" replace />} />
+        <Route path="/forgot-password" element={<PasswordRecovery audience="user" />} />
+        <Route path="/admin/recovery" element={<PasswordRecovery audience="admin" />} />
+        <Route path="/staff/recovery" element={<PasswordRecovery audience="staff" />} />
         <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/map" element={<ProtectedRoute><MapView /></ProtectedRoute>} />
         <Route path="/search" element={<ProtectedRoute><Search /></ProtectedRoute>} />
         <Route path="/records/:id" element={<ProtectedRoute><MemorialRecord /></ProtectedRoute>} />
         <Route path="/reservations" element={<ProtectedRoute><ReservationDetail /></ProtectedRoute>} />
+        <Route path="/reservations/plot/:section/:lot" element={<ProtectedRoute><ReservationDetail /></ProtectedRoute>} />
         <Route path="/reservations/:id" element={<ProtectedRoute><ReservationDetail /></ProtectedRoute>} />
         <Route path="/payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
         <Route path="/saved" element={<ProtectedRoute><Saved /></ProtectedRoute>} />
@@ -48,7 +49,7 @@ function App() {
         <Route path="/admin/reservations" element={<AdminRoute><AdminPortal /></AdminRoute>} />
         <Route path="/admin/reports" element={<AdminRoute><AdminPortal /></AdminRoute>} />
         <Route path="/admin/users" element={<AdminRoute><AdminPortal /></AdminRoute>} />
-        <Route path="/admin/security" element={<AdminRoute><AdminSecurity /></AdminRoute>} />
+        <Route path="/admin/security" element={<Navigate to="/admin/dashboard" replace />} />
         <Route path="/staff" element={<Navigate to="/staff/dashboard" replace />} />
         <Route path="/staff/dashboard" element={<StaffRoute><AdminPortal scope="staff" /></StaffRoute>} />
         <Route path="/staff/records" element={<StaffRoute><AdminPortal scope="staff" /></StaffRoute>} />

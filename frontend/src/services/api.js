@@ -17,6 +17,8 @@ export const authAPI = {
   login: (data) => API.post('/auth/login', data),
   adminLogin: (data) => API.post('/auth/admin/login', data),
   staffLogin: (data) => API.post('/auth/staff/login', data),
+  requestPasswordReset: (email) => API.post('/auth/password-reset/request', { email }),
+  resetPassword: (data) => API.post('/auth/password-reset/confirm', data),
 };
 
 export const userAPI = {
@@ -38,7 +40,9 @@ export const burialAPI = {
 
 export const reservationAPI = {
   getUserReservations: () => API.get('/reservations/user-reservations'),
+  getPlotReservations: () => API.get('/reservations/plots'),
   create: (data) => API.post('/reservations/create', data),
+  reviewPlot: (id, action) => API.post(`/reservations/plots/${id}/review`, { action }),
 };
 
 export const favoriteAPI = {
@@ -76,7 +80,6 @@ export const staffAPI = {
   updateRecord: (id, data) => API.put(`/staff/records/${id}`, data),
   getReservations: () => API.get('/staff/reservations'),
   getReports: () => API.get('/staff/reports'),
-  staffRegister: (data) => API.post('/auth/register', data),
 };
 
 export default API;

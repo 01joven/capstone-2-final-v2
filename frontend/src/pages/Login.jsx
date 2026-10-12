@@ -50,6 +50,9 @@ const Login = () => {
             <input id="login-password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
           </div>
           {error && <p className="error-msg">{error}</p>}
+          <p className="auth-switch admin-forgot-link">
+            <Link to="/forgot-password">Forgot password?</Link>
+          </p>
           <button type="submit" className="btn btn-primary auth-btn">Login</button>
         </form>
 

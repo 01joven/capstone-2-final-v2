@@ -104,6 +104,7 @@ const startServer = async () => {
     'users',
     'user_registration_codes',
     'admin_recovery_codes',
+    'password_reset_codes',
     'memorials',
     'cemeteries',
     'burial_records',

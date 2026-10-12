@@ -15,6 +15,7 @@
     "staff:promote": "node database/promoteStaff.js",
     "admin:promote": "node database/promoteAdmin.js",
     "admin:change-email": "node database/changeAdminEmail.js",
+    "admin:reset-password": "node database/resetAdminPassword.js",
     "admin:seed": "node database/seedAdmin.js"
   },
   "dependencies": {

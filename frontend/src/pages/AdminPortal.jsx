@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import Layout from '../components/Layout';
-import { adminAPI, staffAPI } from '../services/api';
+import { adminAPI, reservationAPI, staffAPI } from '../services/api';
+import usePolling from '../hooks/usePolling';
 import './AdminPortal.css';
 
 const initialRecord = {
@@ -33,15 +34,16 @@ const AdminPortal = ({ scope = 'admin' }) => {
 
   const view = pathname.split('/').pop();
 
+  const loaders = {
+    dashboard: api.getDashboard,
+    records: api.getRecords,
+    reservations: api.getReservations,
+    reports: api.getReports,
+    users: api.getUsers,
+  };
+
   useEffect(() => {
     let active = true;
-    const loaders = {
-      dashboard: api.getDashboard,
-      records: api.getRecords,
-      reservations: api.getReservations,
-      reports: api.getReports,
-      users: api.getUsers,
-    };
     const load = async () => {
       setLoading(true);
       setError('');
@@ -67,6 +69,20 @@ const AdminPortal = ({ scope = 'admin' }) => {
     load();
     return () => { active = false; };
   }, [view, refreshKey]);
+
+  const pollCurrentView = async () => {
+    if (typeof loaders[view] !== 'function') return;
+    try {
+      const { data: responseData } = await loaders[view]();
+      setData(responseData);
+      setLoadedView(view);
+      setError('');
+    } catch (loadError) {
+      setError(loadError.response?.data?.message || loadErrorLabel);
+    }
+  };
+
+  usePolling(pollCurrentView);
 
   const refresh = () => setRefreshKey((current) => current + 1);
 
@@ -127,9 +143,9 @@ const AdminPortal = ({ scope = 'admin' }) => {
             saving={saving}
           />
         )}
-        {ready && view === 'reservations' && <Reservations reservations={data} />}
+        {ready && view === 'reservations' && <Reservations reservations={data} onUpdated={refresh} />}
         {ready && view === 'reports' && <Reports report={data} />}
-        {ready && view === 'users' && <Users users={data} />}
+        {ready && view === 'users' && <Users users={data} onCreated={refresh} />}
       </div>
     </Layout>
   );
@@ -212,30 +228,69 @@ const Records = ({ records, recordForm, setRecordForm, startEditing, saveRecord,
   </>
 );
 
-const Reservations = ({ reservations }) => (
-  <>
-    <h1 className="page-title">Reservations</h1>
-    <div className="admin-table-wrap card">
-      <table className="admin-table">
-        <thead><tr><th>Visitor</th><th>Memorial</th><th>Visit date</th><th>Payment</th><th>Status</th><th>Total</th></tr></thead>
-        <tbody>
-          {(reservations || []).map((reservation) => (
-            <tr key={reservation.id}>
-              <td>{reservation.visitor_name}<br /><small>{reservation.account_email}</small></td>
-              <td>{reservation.memorial_name}</td>
-              <td>{formatDate(reservation.reservation_date)}</td>
-              <td>{reservation.payment_status || 'Not submitted'}</td>
-              <td>{reservation.status}</td>
-              <td>₱{Number(reservation.total_price).toLocaleString()}</td>
-            </tr>
-          ))}
-          {(reservations || []).length === 0 && <tr><td colSpan="6">No reservations have been submitted.</td></tr>}
-        </tbody>
-      </table>
-    </div>
-    <Link className="btn btn-primary" to="/payments?tab=review">Review pending payments</Link>
-  </>
-);
+const Reservations = ({ reservations, onUpdated }) => {
+  const [reviewingId, setReviewingId] = useState(null);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+
+  const reviewPlot = async (reservation, action) => {
+    setReviewingId(reservation.id);
+    setError('');
+    setMessage('');
+    try {
+      const { data } = await reservationAPI.reviewPlot(reservation.id, action);
+      setMessage(data.message);
+      onUpdated();
+    } catch (reviewError) {
+      setError(reviewError.response?.data?.message || 'Could not update this plot request.');
+    } finally {
+      setReviewingId(null);
+    }
+  };
+
+  return (
+    <>
+      <h1 className="page-title">Reservations</h1>
+      <p className="admin-provenance-note">Plot requests hold an available plot until staff approve or reject them. Approved plots become occupied when a verified burial record is entered.</p>
+      {error && <p className="error-msg" role="alert">{error}</p>}
+      {message && <p className="success-msg" role="status">{message}</p>}
+      <div className="admin-table-wrap card">
+        <table className="admin-table">
+          <thead><tr><th>Visitor</th><th>Reservation</th><th>Date</th><th>Payment</th><th>Status</th><th>Total</th><th>Review</th></tr></thead>
+          <tbody>
+            {(reservations || []).map((reservation) => {
+              const isPlot = reservation.reservation_type === 'plot';
+              return (
+                <tr key={reservation.id}>
+                  <td>{reservation.visitor_name}<br /><small>{reservation.account_email}</small></td>
+                  <td>{isPlot
+                    ? `${reservation.cemetery_name || 'Cemetery'} · ${reservation.plot_section}-${String(reservation.plot_number).padStart(2, '0')}`
+                    : reservation.memorial_name}</td>
+                  <td>{formatDate(reservation.reservation_date)}</td>
+                  <td>{isPlot ? 'Not required' : reservation.payment_status || 'Not submitted'}</td>
+                  <td>{reservation.status}</td>
+                  <td>{isPlot ? '—' : `₱${Number(reservation.total_price).toLocaleString()}`}</td>
+                  <td>{isPlot && reservation.status === 'pending' ? (
+                    <div className="admin-form-actions">
+                      <button type="button" className="btn btn-primary" disabled={reviewingId === reservation.id} onClick={() => reviewPlot(reservation, 'approve')}>
+                        {reviewingId === reservation.id ? 'Saving...' : 'Approve'}
+                      </button>
+                      <button type="button" className="btn btn-outline" disabled={reviewingId === reservation.id} onClick={() => reviewPlot(reservation, 'reject')}>
+                        Reject
+                      </button>
+                    </div>
+                  ) : '—'}</td>
+                </tr>
+              );
+            })}
+            {(reservations || []).length === 0 && <tr><td colSpan="7">No reservations have been submitted.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <Link className="btn btn-primary" to="/payments?tab=review">Review pending payments</Link>
+    </>
+  );
+};
 
 const Reports = ({ report }) => {
   const monthly = report?.monthly_reservations || [];
@@ -272,9 +327,9 @@ const Reports = ({ report }) => {
   );
 };
 
-const Users = ({ users }) => {
+const Users = ({ users, onCreated }) => {
   const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'user' });
+  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'staff' });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -285,8 +340,9 @@ const Users = ({ users }) => {
     try {
       await adminAPI.createUser(form);
       setShowModal(false);
-      setForm({ name: '', email: '', password: '', role: 'user' });
+      setForm({ name: '', email: '', password: '', role: 'staff' });
       setError('');
+      onCreated();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to create user.');
     } finally {
@@ -301,7 +357,7 @@ const Users = ({ users }) => {
         <button className="btn btn-primary" type="button" onClick={() => setShowModal(true)}>Add User</button>
       </div>
       <p className="admin-provenance-note">
-        Account details are visible only to administrators. New admin access must be granted through the trusted administrator promotion procedure; this screen does not promote accounts.
+        Account details are visible only to administrators. Create staff or administrator accounts here; public user accounts are created through registration.
       </p>
       <div className="admin-table-wrap card">
         <table className="admin-table">
@@ -338,7 +394,6 @@ const Users = ({ users }) => {
               <div className="form-group">
                 <label htmlFor="user-role">Role</label>
                 <select id="user-role" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-                  <option value="user">User</option>
                   <option value="staff">Staff</option>
                   <option value="admin">Administrator</option>
                 </select>

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useCallback, useContext, useState, useEffect } from 'react';
 import { authAPI } from '../services/api';
 
 const AuthContext = createContext();
@@ -41,14 +41,6 @@ export const AuthProvider = ({ children }) => {
     return data.user;
   };
 
-  const registerStaff = async (name, email, password) => {
-    const { data } = await authAPI.staffAPI.staffRegister({ name, email, password });
-    localStorage.setItem('token', data.token);
-    localStorage.setItem('user', JSON.stringify(data.user));
-    setUser(data.user);
-    return data.user;
-  };
-
   const register = async (name, email, password) => {
     const { data } = await authAPI.register({ name, email, password });
     localStorage.setItem('token', data.token);
@@ -63,13 +55,13 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
-  const updateUser = (updatedUser) => {
+  const updateUser = useCallback((updatedUser) => {
     localStorage.setItem('user', JSON.stringify(updatedUser));
     setUser(updatedUser);
-  };
+  }, []);
 
   return (
-    <AuthContext.Provider value={{ user, login, loginAdmin, loginStaff, register, registerStaff, logout, updateUser, loading }}>
+    <AuthContext.Provider value={{ user, login, loginAdmin, loginStaff, register, logout, updateUser, loading }}>
       {children}
     </AuthContext.Provider>
   );

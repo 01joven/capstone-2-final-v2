@@ -42,7 +42,7 @@ const updateProfile = async (req, res) => {
     const { name, email, password } = req.body || {};
     if (req.user.role === 'admin' && (email !== undefined || password !== undefined)) {
       return res.status(403).json({
-        message: 'Administrator email and password changes require the verified Account Security flow.',
+        message: 'Administrator email and password changes must be performed by a trusted system operator.',
       });
     }
     const updates = [];

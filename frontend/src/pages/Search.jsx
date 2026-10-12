@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import MemorialCard from '../components/MemorialCard';
 import { burialAPI, memorialAPI, favoriteAPI } from '../services/api';
+import usePolling from '../hooks/usePolling';
 import './Search.css';
 
 const Search = () => {
@@ -10,12 +11,15 @@ const Search = () => {
   const [burials, setBurials] = useState([]);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
+  const [submittedSearch, setSubmittedSearch] = useState('');
+  const [submittedCategory, setSubmittedCategory] = useState('');
+  const [searchRequestKey, setSearchRequestKey] = useState(0);
   const [savedItems, setSavedItems] = useState({});
   const [savingMemorialId, setSavingMemorialId] = useState(null);
   const [searchError, setSearchError] = useState('');
   const [isSearching, setIsSearching] = useState(true);
 
-  const fetchResults = async (searchTerm = search, selectedCategory = category) => {
+  const fetchResults = useCallback(async (searchTerm, selectedCategory) => {
     setSearchError('');
     setIsSearching(true);
     try {
@@ -35,15 +39,23 @@ const Search = () => {
     } finally {
       setIsSearching(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchResults();
-  }, []);
+    fetchResults(submittedSearch, submittedCategory);
+  }, [fetchResults, submittedSearch, submittedCategory, searchRequestKey]);
+
+  const refreshResults = useCallback(
+    () => fetchResults(submittedSearch, submittedCategory),
+    [fetchResults, submittedSearch, submittedCategory]
+  );
+  usePolling(refreshResults);
 
   const handleSearch = (e) => {
     e.preventDefault();
-    fetchResults();
+    setSubmittedSearch(search);
+    setSubmittedCategory(category);
+    setSearchRequestKey((currentKey) => currentKey + 1);
   };
 
   const handleSave = async (memorialId) => {

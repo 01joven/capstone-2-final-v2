@@ -1,6 +1,11 @@
 const pool = require('../config/db');
 const { purgeDemoData } = require('../database/purgeDemoData');
 const bcrypt = require('bcryptjs');
+const {
+  parsePlotReference,
+  isBurialPlotOccupied,
+  getActivePlotReservation,
+} = require('../services/plotAvailability');
 
 const validateRecord = (body = {}) => {
   const fullName = typeof body.full_name === 'string' ? body.full_name.trim() : '';
@@ -78,27 +83,71 @@ const createRecord = async (req, res) => {
     return res.status(400).json({ message: 'Explicit verification and publication authorization are required.' });
   }
 
+  let client;
+  let transactionStarted = false;
   try {
     const { fullName, graveReference, birthDate, deathDate, isDemo } = validated.values;
-    const result = await pool.query(
-      `INSERT INTO burial_records (cemetery_id, full_name, grave_reference, birth_date, death_date, is_demo)
-       SELECT id, $1, $2, $3, $4, $5
-       FROM cemeteries
+    client = await pool.connect();
+    await client.query('BEGIN');
+    transactionStarted = true;
+
+    const cemeteryResult = await client.query(
+      `SELECT id FROM cemeteries
        WHERE name = 'Cogon Cemetery' AND barangay = 'Cogon'
          AND municipality = 'Cordova' AND province = 'Cebu'
-       RETURNING id, full_name, grave_reference, birth_date, death_date, is_demo`,
-      [fullName, graveReference, birthDate, deathDate, isDemo]
+       FOR UPDATE`
     );
-    if (result.rows.length === 0) {
+    const cemeteryId = cemeteryResult.rows[0]?.id;
+    if (!cemeteryId) {
+      await client.query('ROLLBACK');
+      transactionStarted = false;
       return res.status(409).json({ message: 'Cogon Cemetery is not configured in the database.' });
     }
+
+    const plot = parsePlotReference(graveReference);
+    if (plot) {
+      if (await isBurialPlotOccupied(client, cemeteryId, plot.section, plot.lotNumber)) {
+        await client.query('ROLLBACK');
+        transactionStarted = false;
+        return res.status(409).json({ message: 'That plot is already occupied by another memorial record.' });
+      }
+      const reservation = await getActivePlotReservation(client, cemeteryId, plot.section, plot.lotNumber);
+      if (reservation?.status === 'pending') {
+        await client.query('ROLLBACK');
+        transactionStarted = false;
+        return res.status(409).json({ message: 'That plot has a pending reservation request. Review the request before assigning it.' });
+      }
+    }
+
+    const result = await client.query(
+      `INSERT INTO burial_records (cemetery_id, full_name, grave_reference, birth_date, death_date, is_demo)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, full_name, grave_reference, birth_date, death_date, is_demo`,
+      [cemeteryId, fullName, graveReference, birthDate, deathDate, isDemo]
+    );
+    if (plot) {
+      await client.query(
+        `UPDATE reservations SET status = 'completed'
+         WHERE cemetery_id = $1 AND UPPER(plot_section) = $2 AND plot_number = $3 AND status = 'confirmed'`,
+        [cemeteryId, plot.section, plot.lotNumber]
+      );
+    }
+    await client.query('COMMIT');
+    transactionStarted = false;
     res.status(201).json(result.rows[0]);
   } catch (error) {
+    if (transactionStarted) {
+      await client.query('ROLLBACK').catch((rollbackError) => {
+        console.error('Create memorial record rollback error:', rollbackError);
+      });
+    }
     if (error.code === '23505') {
       return res.status(409).json({ message: 'A record with this name already exists for Cogon Cemetery.' });
     }
     console.error('Create admin record error:', error);
     res.status(500).json({ message: 'Unable to create memorial record.' });
+  } finally {
+    if (client) client.release();
   }
 };
 
@@ -118,9 +167,42 @@ const updateRecord = async (req, res) => {
     return res.status(400).json({ message: validated.error });
   }
 
+  let client;
+  let transactionStarted = false;
   try {
     const { fullName, graveReference, birthDate, deathDate, isDemo } = validated.values;
-    const result = await pool.query(
+    client = await pool.connect();
+    await client.query('BEGIN');
+    transactionStarted = true;
+
+    const recordResult = await client.query(
+      'SELECT cemetery_id FROM burial_records WHERE id = $1 FOR UPDATE',
+      [recordId]
+    );
+    if (recordResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      transactionStarted = false;
+      return res.status(404).json({ message: 'Memorial record not found.' });
+    }
+    const cemeteryId = recordResult.rows[0].cemetery_id;
+    await client.query('SELECT id FROM cemeteries WHERE id = $1 FOR UPDATE', [cemeteryId]);
+
+    const plot = parsePlotReference(graveReference);
+    if (plot) {
+      if (await isBurialPlotOccupied(client, cemeteryId, plot.section, plot.lotNumber, recordId)) {
+        await client.query('ROLLBACK');
+        transactionStarted = false;
+        return res.status(409).json({ message: 'That plot is already occupied by another memorial record.' });
+      }
+      const reservation = await getActivePlotReservation(client, cemeteryId, plot.section, plot.lotNumber);
+      if (reservation?.status === 'pending') {
+        await client.query('ROLLBACK');
+        transactionStarted = false;
+        return res.status(409).json({ message: 'That plot has a pending reservation request. Review the request before assigning it.' });
+      }
+    }
+
+    const result = await client.query(
       `UPDATE burial_records
        SET full_name = $1, grave_reference = $2, birth_date = $3,
            death_date = $4, is_demo = $5
@@ -128,16 +210,29 @@ const updateRecord = async (req, res) => {
        RETURNING id, full_name, grave_reference, birth_date, death_date, is_demo`,
       [fullName, graveReference, birthDate, deathDate, isDemo, recordId]
     );
-    if (result.rows.length === 0) {
-      return res.status(404).json({ message: 'Memorial record not found.' });
+    if (plot) {
+      await client.query(
+        `UPDATE reservations SET status = 'completed'
+         WHERE cemetery_id = $1 AND UPPER(plot_section) = $2 AND plot_number = $3 AND status = 'confirmed'`,
+        [cemeteryId, plot.section, plot.lotNumber]
+      );
     }
+    await client.query('COMMIT');
+    transactionStarted = false;
     res.json(result.rows[0]);
   } catch (error) {
+    if (transactionStarted) {
+      await client.query('ROLLBACK').catch((rollbackError) => {
+        console.error('Update memorial record rollback error:', rollbackError);
+      });
+    }
     if (error.code === '23505') {
       return res.status(409).json({ message: 'A record with this name already exists for Cogon Cemetery.' });
     }
     console.error('Update admin record error:', error);
     res.status(500).json({ message: 'Unable to update memorial record.' });
+  } finally {
+    if (client) client.release();
   }
 };
 
@@ -145,13 +240,16 @@ const getReservations = async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT r.id, r.visitor_name, r.contact, r.reservation_date, r.status, r.total_price,
+              r.plot_section, r.plot_number, c.name AS cemetery_name,
+              CASE WHEN r.plot_section IS NOT NULL THEN 'plot' ELSE 'memorial' END AS reservation_type,
               u.name AS account_name, u.email AS account_email, m.name AS memorial_name,
               (SELECT p.payment_status FROM payments p
                WHERE p.reservation_id = r.id
                ORDER BY p.transaction_date DESC, p.id DESC LIMIT 1) AS payment_status
        FROM reservations r
        JOIN users u ON u.id = r.user_id
-       JOIN memorials m ON m.id = r.memorial_id
+       LEFT JOIN memorials m ON m.id = r.memorial_id
+       LEFT JOIN cemeteries c ON c.id = r.cemetery_id
        ORDER BY r.created_at DESC`
     );
     res.json(result.rows);
@@ -213,14 +311,25 @@ const getUsers = async (req, res) => {
 };
 
 const createUser = async (req, res) => {
-  const { name, email, password, role } = req.body || {};
+  const body = req.body || {};
+  const name = typeof body.name === 'string' ? body.name.trim() : '';
+  const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+  const password = body.password;
+  const role = body.role;
 
-  if (!name || !email || !password) {
+  if (!name || !email || typeof password !== 'string' || !role) {
     return res.status(400).json({ message: 'Name, email, and password are required.' });
   }
 
-  const validRoles = ['user', 'staff', 'admin'];
-  const userRole = validRoles.includes(role) ? role : 'user';
+  if (name.length > 100) {
+    return res.status(400).json({ message: 'Name must be 100 characters or fewer.' });
+  }
+
+  const validRoles = ['staff', 'admin'];
+  if (typeof role !== 'string' || !validRoles.includes(role.trim().toLowerCase())) {
+    return res.status(400).json({ message: 'Role must be staff or admin.' });
+  }
+  const userRole = role.trim().toLowerCase();
 
   if (password.length < 8) {
     return res.status(400).json({ message: 'Password must be at least 8 characters.' });
@@ -236,7 +345,7 @@ const createUser = async (req, res) => {
       `INSERT INTO users (name, email, password_hash, role, onboarding_completed, auth_version)
        VALUES ($1, $2, $3, $4, TRUE, 0)
        RETURNING id, name, email, role, created_at`,
-      [name, email, passwordHash, role]
+      [name, email, passwordHash, userRole]
     );
 
     const user = result.rows[0];

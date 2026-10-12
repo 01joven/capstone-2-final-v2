@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Layout from '../components/Layout';
 import { userAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import usePolling from '../hooks/usePolling';
 import './Profile.css';
 
 const Profile = () => {
@@ -11,25 +12,50 @@ const Profile = () => {
   const [password, setPassword] = useState('');
   const [stats, setStats] = useState({ reservations: 0, saved: 0 });
   const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [isDirty, setIsDirty] = useState(false);
+
+  const loadProfile = useCallback(async () => {
+    try {
+      const { data } = await userAPI.getProfile();
+      if (!isDirty) {
+        setName(data.name);
+        setEmail(data.email);
+        if (user?.name !== data.name || user?.email !== data.email) {
+          updateUser({ ...user, name: data.name, email: data.email });
+        }
+      }
+      setStats(data.stats);
+      setError('');
+    } catch (loadError) {
+      setError(loadError.response?.data?.message || 'Could not refresh your profile.');
+    }
+  }, [isDirty, updateUser, user]);
 
   useEffect(() => {
-    userAPI.getProfile().then(({ data }) => {
-      setName(data.name);
-      setEmail(data.email);
-      setStats(data.stats);
-    });
-  }, []);
+    loadProfile();
+  }, [loadProfile]);
+
+  usePolling(loadProfile);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     const updateData = { name, email };
     if (password) updateData.password = password;
 
-    const { data } = await userAPI.updateProfile(updateData);
-    updateUser({ ...user, name: data.name, email: data.email });
-    setPassword('');
-    setMessage('Profile updated successfully!');
-    setTimeout(() => setMessage(''), 3000);
+    setError('');
+    try {
+      const { data } = await userAPI.updateProfile(updateData);
+      updateUser({ ...user, name: data.name, email: data.email });
+      setName(data.name);
+      setEmail(data.email);
+      setPassword('');
+      setIsDirty(false);
+      setMessage('Profile updated successfully!');
+      setTimeout(() => setMessage(''), 3000);
+    } catch (saveError) {
+      setError(saveError.response?.data?.message || 'Could not save your profile.');
+    }
   };
 
   return (
@@ -42,16 +68,17 @@ const Profile = () => {
             <h3>Account Settings</h3>
             <div className="form-group">
               <label>Name</label>
-              <input type="text" value={name} onChange={(e) => setName(e.target.value)} required />
+              <input type="text" value={name} onChange={(e) => { setName(e.target.value); setIsDirty(true); }} required />
             </div>
             <div className="form-group">
               <label>Email</label>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+              <input type="email" value={email} onChange={(e) => { setEmail(e.target.value); setIsDirty(true); }} required />
             </div>
             <div className="form-group">
               <label>Change Password</label>
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Leave blank to keep current" />
+              <input type="password" value={password} onChange={(e) => { setPassword(e.target.value); setIsDirty(true); }} placeholder="Leave blank to keep current" />
             </div>
+            {error && <p className="error-msg" role="alert">{error}</p>}
             {message && <p style={{ color: 'var(--success)', marginBottom: 12 }}>{message}</p>}
             <button type="submit" className="btn btn-primary">Save Changes</button>
           </form>

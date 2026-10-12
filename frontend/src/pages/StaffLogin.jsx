@@ -39,6 +39,9 @@ const StaffLogin = () => {
           <label htmlFor="staff-login-password">Password</label>
           <input id="staff-login-password" type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} required />
         </div>
+        <p className="auth-switch admin-forgot-link">
+          <Link to="/staff/recovery">Forgot password?</Link>
+        </p>
         {error && <p className="error-msg" role="alert">{error}</p>}
         <button type="submit" className="btn btn-primary auth-btn">Login</button>
       </form>

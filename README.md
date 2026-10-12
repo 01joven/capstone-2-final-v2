@@ -25,11 +25,11 @@ To use Neon, uncomment `DATABASE_URL` in `backend/.env` and replace the example 
 
 User registration no longer requires email verification. Public registration at `/register` creates a `user` account immediately. There is no public staff or admin registration.
 
-Optional: Configure Resend for transactional emails (password reset, notifications) by setting `RESEND_API_KEY` and `RESEND_FROM_EMAIL` in `backend/.env`. Create an API key at https://resend.com/api-keys and verify a domain. If unset, email sending is skipped.
+Configure Resend with `RESEND_API_KEY` and `RESEND_FROM_EMAIL` in `backend/.env` to enable email delivery. This is required for self-service password resets; other notifications are optional. Create an API key at https://resend.com/api-keys and verify a sending domain. If reset email delivery is unavailable, an administrator can use the operator reset command below.
 
 If an existing user account needs administrator access, stop the local app and run `npm run admin:promote -- your-admin-email@example.com` from the project root, then restart and sign in again. For Neon, you can instead run `UPDATE users SET role = 'admin' WHERE email = 'your-admin-email@example.com';` in the database console. Promote only trusted administrator accounts. Customers submit the GCash transaction reference after scanning the static InstaPay QR; reservations remain pending until a staff member checks the payment and approves it in Payments. The QR does not send automatic payment confirmations.
 
-Administrator email/password changes require the verified Account Security flow; admin email/password fields cannot be changed through the ordinary profile-update endpoint. If the current email is inaccessible, there is no self-service bypass: a trusted system operator must verify the person's identity and administrator authorization offline, then run `npm run admin:change-email -- old-admin@example.com new-admin@example.com --verified-authorized` from the project root. This operator-only command revokes existing sessions.
+Users, staff, and administrators can reset their password from their respective login screens using a six-digit code sent to the registered email. Codes expire after 10 minutes, allow at most five attempts, and requests are limited to one per minute. Password resets revoke all existing sessions. Administrator passwords must be at least 12 characters. If administrator email delivery is unavailable, a trusted system operator must verify the administrator's identity and authorization offline before changing credentials. To change an administrator email, run `npm run admin:change-email -- old-admin@example.com new-admin@example.com --verified-authorized`. As a recovery fallback, run `npm run admin:reset-password -- admin@example.com --verified-authorized` and enter the new password in the private terminal prompt.
 
 The dev server creates the local database tables and demo memorial records automatically. For local development, it also seeds a default administrator if no admin account exists:
 
@@ -65,7 +65,7 @@ To grant staff access to an existing registered account instead, stop the app an
 npm run staff:promote -- staff@example.com
 ```
 
-Sign-in pages: users at `/login`, staff at `/staff/login`, administrators at `/admin/login`. Staff manage memorial records, reservations, reports, and payment verification, but cannot access User Management or Account Security; those stay administrator-only. Role changes (promote/demote) are operator-only CLI commands; the User Management screen is read-only and cannot grant access.
+Sign-in pages: users at `/login`, staff at `/staff/login`, administrators at `/admin/login`. Staff manage memorial records, reservations, reports, and payment verification, but cannot access User Management; that stays administrator-only. Administrators can create staff or administrator accounts in User Management; public registration continues to create regular user accounts. Promoting or demoting an existing account remains an operator-only CLI action. Administrator credential recovery and email changes are performed by a trusted operator, not from self-service account screens.
 
 ### Removing demo content (one-time cutover)
 
@@ -74,7 +74,7 @@ Older databases may still contain sample burial records (`is_demo = TRUE`) and `
 1. Sign in as administrator and preview with `{ "confirm": false }`:
 
 ```powershell
-curl -X POST http://localhost:5001/api/admin/maintenance/purge-demo `
+curl -X POST http://localhost:5000/api/admin/maintenance/purge-demo `
   -H "Authorization: Bearer <admin-token>" `
   -H "Content-Type: application/json" `
   -d '{ "confirm": false }'
@@ -102,9 +102,11 @@ The backend checks its configuration, database connection, and required tables b
 
 ## User and administrator flows
 
-Public users register at `/register` and get immediate access (no email verification). They can then use Home, Search, Memorial Record, Map, Reservations, Saved Memorials, and Profile; their reservations, payments, and saved memorials are real operational data. Staff sign in at `/staff/login` and work in the Staff Console: Dashboard, Memorial Records, Cemetery Map/Plots, Reservations, Reports, and payment verification. Administrators use `/admin/login` for the same operational screens plus User Management and Account Security. There is no public staff or admin registration page or endpoint. A trusted operator grants staff access with `npm run staff:promote -- email` and administrator access with `npm run admin:promote -- email`; the User Management screen is read-only and cannot grant access.
+Public users register at `/register` and get immediate access (no email verification). They can then use Home, Search, Memorial Record, Map, Reservations, Saved Memorials, and Profile; their reservations, payments, and saved memorials are real operational data. Customers can request an available cemetery plot from the map; pending requests reserve the plot until staff approve or reject them. Staff sign in at `/staff/login` and work in the Staff Console: Dashboard, Memorial Records, Cemetery Map/Plots, Reservations, Reports, and payment verification, including reviewing plot requests. Administrators use `/admin/login` for the same operational screens plus User Management. There is no public staff or admin registration page or endpoint. Administrators can create new staff and administrator accounts in User Management. A trusted operator grants staff access with `npm run staff:promote -- email` and administrator access with `npm run admin:promote -- email` when changing the role of an existing account. Administrator email changes and password recovery are operator-managed; the login recovery link explains this procedure.
 
 New burial records are saved as real data (`is_demo = FALSE`) by default. Rows left over from earlier demo seeding stay labeled **Sample / Demo Data** in public views until purged or re-verified, and their locations are not presented as verified cemetery placement. Saving a record as real requires confirming verification and publication authorization in the record form; tick the sample box only for test entries.
+
+Open pages refresh shared records, reservations, plot availability, payment reviews, saved memorials, and dashboard totals every 10 seconds while visible. Returning to a browser tab refreshes immediately. This is near-real-time polling, not instant push notifications; users need an active connection to the same running backend to see updates.
 
 ## API
 
@@ -115,6 +117,8 @@ New burial records are saved as real data (`is_demo = FALSE`) by default. Rows l
 | POST | `/api/auth/login` | Log in |
 | POST | `/api/auth/admin/login` | Log in to the admin portal with an existing admin account |
 | POST | `/api/auth/staff/login` | Log in to the staff console with an existing staff account |
+| POST | `/api/auth/password-reset/request` | Request a password reset code by email |
+| POST | `/api/auth/password-reset/confirm` | Verify a reset code and set a new password |
 | GET | `/api/users/profile` | Get the signed-in user's profile |
 | PUT | `/api/users/update` | Update the signed-in user's profile |
 | POST | `/api/users/onboarding-complete` | Mark onboarding complete |
@@ -123,6 +127,8 @@ New burial records are saved as real data (`is_demo = FALSE`) by default. Rows l
 | GET | `/api/burials?search=name&cemetery=Cogon%20Cemetery` | Search by name, lot, death date, record ID, or section |
 | GET | `/api/reservations/user-reservations` | List the signed-in user's reservations |
 | POST | `/api/reservations/create` | Create a reservation |
+| GET | `/api/reservations/plots` | List occupied plot reservations for the Cogon map (signed-in users) |
+| POST | `/api/reservations/plots/:id/review` | Approve or reject a plot request (staff or admin; `{ "action": "approve" }` or `{ "action": "reject" }`) |
 | GET | `/api/favorites` | List saved memorials |
 | POST | `/api/favorites/add` | Save a memorial |
 | DELETE | `/api/favorites/remove/:id` | Remove a saved memorial |
@@ -149,6 +155,6 @@ The Memorial Sites view includes an interactive OpenStreetMap centered on the Co
 
 Login and registration use a responsive split-panel layout over the supplied Cogon cemetery photo. The original memorial logo is reused in the authentication header, landing page, and application sidebar.
 
-The GCash checkout displays the supplied static InstaPay QR and collects the GCash transaction reference for manual staff verification; it does not log into GCash or automatically detect transfers. A reservation is confirmed only after an authorized staff member or administrator verifies and approves the submitted reference. The cemetery plot map uses a grave record's `grave_reference` when it is in section/lot form (for example, `A-03`). Records without a grave reference are placed in a clearly labeled schematic layout; these placements are not verified burial locations, so staff should enter the real grave reference for every record. Reservations are not currently linked to cemetery plots, so reserved-plot status is not tracked on the map.
+The GCash checkout displays the supplied static InstaPay QR and collects the GCash transaction reference for manual staff verification; it does not log into GCash or automatically detect transfers. Memorial-site reservations are confirmed after an authorized staff member or administrator verifies and approves the submitted reference. Customers can also choose a vacant plot from the schematic cemetery map and submit a no-payment request for staff review. Pending and approved requests hold that plot on the map; rejected requests release it. Once staff enter a verified burial record for an approved plot, the map marks it occupied. Plot selection is based on a grave record's `grave_reference` when it is in section/lot form (for example, `A-03`). Records without a grave reference use clearly labeled demo placements, not verified burial locations, so staff should enter the real grave reference for every record.
 
 Authenticated endpoints require `Authorization: Bearer <token>`.

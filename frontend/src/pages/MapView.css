@@ -125,11 +125,17 @@
 
 .plot-cell.available {
   background: #499467;
-  cursor: not-allowed;
+  cursor: pointer;
   opacity: 0.85;
 }
 
+.plot-cell.reserved {
+  background: #d5a52e;
+  cursor: not-allowed;
+}
+
 .plot-cell.occupied:hover,
+.plot-cell.available:hover,
 .plot-cell.selected {
   border-color: #42372d;
   box-shadow: 0 0 0 2px #fff, 0 0 0 4px #42372d;

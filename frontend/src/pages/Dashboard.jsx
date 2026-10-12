@@ -3,20 +3,35 @@ import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { userAPI } from '../services/api';
+import usePolling from '../hooks/usePolling';
 import './Dashboard.css';
 
 const Dashboard = () => {
   const { user } = useAuth();
   const [stats, setStats] = useState({ reservations: 0, saved: 0 });
+  const [error, setError] = useState('');
+
+  const loadStats = async () => {
+    try {
+      const { data } = await userAPI.getProfile();
+      setStats(data.stats);
+      setError('');
+    } catch (loadError) {
+      setError(loadError.response?.data?.message || 'Could not refresh your dashboard.');
+    }
+  };
 
   useEffect(() => {
-    userAPI.getProfile().then(({ data }) => setStats(data.stats));
+    loadStats();
   }, []);
+
+  usePolling(loadStats);
 
   return (
     <Layout>
       <div className="page-container">
         <h1 className="page-title">Welcome, {user?.name}!</h1>
+        {error && <p className="error-msg" role="alert">{error}</p>}
 
         <div className="dashboard-stats">
           <div className="stat-card card">

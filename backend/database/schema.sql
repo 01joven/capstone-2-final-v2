@@ -31,6 +31,19 @@ CREATE TABLE IF NOT EXISTS admin_recovery_codes (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS password_reset_codes (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  code_hash VARCHAR(64) NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  expires_at TIMESTAMP NOT NULL,
+  used_at TIMESTAMP,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS password_reset_codes_user_created_idx
+  ON password_reset_codes (user_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS memorials (
   id SERIAL PRIMARY KEY,
   name VARCHAR(200) NOT NULL,
@@ -76,6 +89,9 @@ CREATE TABLE IF NOT EXISTS reservations (
   id SERIAL PRIMARY KEY,
   user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
   memorial_id INTEGER REFERENCES memorials(id) ON DELETE CASCADE,
+  cemetery_id INTEGER REFERENCES cemeteries(id) ON DELETE CASCADE,
+  plot_section VARCHAR(10),
+  plot_number INTEGER,
   visitor_name VARCHAR(100) NOT NULL,
   contact VARCHAR(100) NOT NULL,
   reservation_date DATE NOT NULL,
@@ -83,6 +99,13 @@ CREATE TABLE IF NOT EXISTS reservations (
   total_price DECIMAL(10, 2) NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE reservations ADD COLUMN IF NOT EXISTS cemetery_id INTEGER REFERENCES cemeteries(id) ON DELETE CASCADE;
+ALTER TABLE reservations ADD COLUMN IF NOT EXISTS plot_section VARCHAR(10);
+ALTER TABLE reservations ADD COLUMN IF NOT EXISTS plot_number INTEGER;
+CREATE UNIQUE INDEX IF NOT EXISTS reservations_active_plot_unique
+  ON reservations (cemetery_id, UPPER(plot_section), plot_number)
+  WHERE plot_section IS NOT NULL AND status IN ('pending', 'confirmed');
 
 CREATE TABLE IF NOT EXISTS saved_items (
   id SERIAL PRIMARY KEY,

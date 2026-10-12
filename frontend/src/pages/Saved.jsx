@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import MemorialCard from '../components/MemorialCard';
 import { favoriteAPI } from '../services/api';
+import usePolling from '../hooks/usePolling';
 import './Saved.css';
 
 const Saved = () => {
@@ -11,21 +12,23 @@ const Saved = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [removingMemorialId, setRemovingMemorialId] = useState(null);
 
-  useEffect(() => {
-    const loadSaved = async () => {
-      setError('');
-      try {
-        const { data } = await favoriteAPI.getAll();
-        setSaved(data);
-      } catch (loadError) {
-        setError(loadError.response?.data?.message || 'Could not load your saved memorials. Please try again.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadSaved();
+  const loadSaved = useCallback(async () => {
+    setError('');
+    try {
+      const { data } = await favoriteAPI.getAll();
+      setSaved(data);
+    } catch (loadError) {
+      setError(loadError.response?.data?.message || 'Could not load your saved memorials. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadSaved();
+  }, [loadSaved]);
+
+  usePolling(loadSaved);
 
   const handleRemove = async (memorialId) => {
     const item = saved.find((s) => s.id === memorialId);

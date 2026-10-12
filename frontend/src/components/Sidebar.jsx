@@ -14,7 +14,6 @@ const Sidebar = () => {
       { to: '/admin/reservations', label: 'Reservations', icon: '📅' },
       { to: '/admin/reports', label: 'Reports', icon: '📈' },
       { to: '/admin/users', label: 'User Management', icon: '👥' },
-      { to: '/admin/security', label: 'Account Security', icon: '🔐' },
       { to: '/payments?tab=review', label: 'Verify Payments', icon: '✅' },
     ]
     : user?.is_staff
