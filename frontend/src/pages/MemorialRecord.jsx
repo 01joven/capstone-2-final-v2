@@ -19,12 +19,13 @@ const MemorialRecord = () => {
     const loadRecord = async () => {
       setLoading(true);
       setError('');
+      setRecord(null);
       try {
         const { data } = await burialAPI.getAll({
           search: `MR-${String(id).padStart(4, '0')}`,
           cemetery: 'Cogon Cemetery',
         });
-        const matchingRecord = data.find((entry) => String(entry.id) === String(id));
+        const matchingRecord = (Array.isArray(data) ? data : []).find((entry) => String(entry.id) === String(id));
         if (!matchingRecord) {
           setError('No memorial record was found for this ID.');
           return;

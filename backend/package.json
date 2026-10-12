@@ -10,8 +10,12 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "db:setup": "node database/setup.js",
+    "db:purge-demo": "node database/purgeDemoData.js",
+    "user:create": "node database/createUser.js",
+    "staff:promote": "node database/promoteStaff.js",
     "admin:promote": "node database/promoteAdmin.js",
-    "admin:change-email": "node database/changeAdminEmail.js"
+    "admin:change-email": "node database/changeAdminEmail.js",
+    "admin:seed": "node database/seedAdmin.js"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",
@@ -20,8 +24,8 @@
     "dotenv": "^16.4.5",
     "express": "^4.21.0",
     "jsonwebtoken": "^9.0.2",
-    "nodemailer": "^10.0.15",
-    "pg": "^8.13.0"
+    "pg": "^8.13.0",
+    "resend": "^3.2.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.7"

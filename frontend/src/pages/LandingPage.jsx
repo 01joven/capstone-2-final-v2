@@ -12,6 +12,7 @@ const LandingPage = () => {
         </Link>
         <div className="landing-nav-links">
           <Link to="/admin/login" className="btn btn-outline">Admin Login</Link>
+          <Link to="/staff/login" className="btn btn-outline">Staff Login</Link>
           <Link to="/login" className="btn btn-outline">Login</Link>
           <Link to="/register" className="btn btn-primary">Register</Link>
         </div>
@@ -27,11 +28,6 @@ const LandingPage = () => {
           <Link to="/register" className="btn btn-accent hero-btn">Get Started</Link>
         </div>
       </section>
-
-      <p className="data-provenance-notice">
-        Sample/demo records and map placements are for demonstration only. Real cemetery information should be used only when verified and authorized.
-      </p>
-
       <section className="features">
         <div className="feature-card card">
           <div className="feature-icon">🗺️</div>

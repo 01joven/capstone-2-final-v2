@@ -8,6 +8,10 @@
   "scripts": {
     "dev": "concurrently -k -n backend,frontend \"npm run dev --workspace=memorial-map-backend\" \"npm run dev --workspace=memorial-map-frontend\"",
     "db:setup": "npm run db:setup --workspace=memorial-map-backend",
+    "db:purge-demo": "npm run db:purge-demo --workspace=memorial-map-backend --",
+    "user:create": "npm run user:create --workspace=memorial-map-backend --",
+    "staff:promote": "npm run staff:promote --workspace=memorial-map-backend --",
+    "admin:seed": "npm run admin:seed --workspace=memorial-map-backend",
     "admin:promote": "npm run admin:promote --workspace=memorial-map-backend --",
     "admin:change-email": "npm run admin:change-email --workspace=memorial-map-backend --"
   },

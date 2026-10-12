@@ -17,24 +17,18 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_version INTEGER NOT NULL DEFAULT
 UPDATE users SET role = 'user' WHERE role = 'visitor';
 
 CREATE TABLE IF NOT EXISTS user_registration_codes (
-  email VARCHAR(255) PRIMARY KEY,
-  name VARCHAR(100) NOT NULL,
-  password_hash VARCHAR(255) NOT NULL,
-  code_hash CHAR(64) NOT NULL,
-  expires_at TIMESTAMPTZ NOT NULL,
-  last_sent_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  attempts INTEGER NOT NULL DEFAULT 0
+  id SERIAL PRIMARY KEY,
+  code VARCHAR(64) UNIQUE NOT NULL,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  used BOOLEAN DEFAULT FALSE
 );
 
 CREATE TABLE IF NOT EXISTS admin_recovery_codes (
-  email VARCHAR(255) NOT NULL,
-  purpose VARCHAR(40) NOT NULL,
-  code_hash CHAR(64) NOT NULL,
-  expires_at TIMESTAMPTZ NOT NULL,
-  last_sent_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  attempts INTEGER NOT NULL DEFAULT 0,
-  pending_email VARCHAR(255),
-  PRIMARY KEY (email, purpose)
+  id SERIAL PRIMARY KEY,
+  code VARCHAR(64) UNIQUE NOT NULL,
+  used BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS memorials (
@@ -46,11 +40,12 @@ CREATE TABLE IF NOT EXISTS memorials (
   category VARCHAR(100),
   image_url TEXT,
   price DECIMAL(10, 2) DEFAULT 0,
-  is_demo BOOLEAN NOT NULL DEFAULT TRUE,
+  is_demo BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-ALTER TABLE memorials ADD COLUMN IF NOT EXISTS is_demo BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE memorials ADD COLUMN IF NOT EXISTS is_demo BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE memorials ALTER COLUMN is_demo SET DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS cemeteries (
   id SERIAL PRIMARY KEY,
@@ -69,12 +64,13 @@ CREATE TABLE IF NOT EXISTS burial_records (
   grave_reference VARCHAR(100),
   birth_date DATE,
   death_date DATE,
-  is_demo BOOLEAN NOT NULL DEFAULT TRUE,
+  is_demo BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE (cemetery_id, full_name)
 );
 
-ALTER TABLE burial_records ADD COLUMN IF NOT EXISTS is_demo BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE burial_records ADD COLUMN IF NOT EXISTS is_demo BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE burial_records ALTER COLUMN is_demo SET DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS reservations (
   id SERIAL PRIMARY KEY,
@@ -145,132 +141,5 @@ INSERT INTO cemeteries (name, barangay, municipality, province)
 VALUES ('Cogon Cemetery', 'Cogon', 'Cordova', 'Cebu')
 ON CONFLICT (name, barangay, municipality, province) DO NOTHING;
 
-UPDATE burial_records record
-SET full_name = 'Rogelio P. Torresjas'
-FROM cemeteries cemetery
-WHERE record.cemetery_id = cemetery.id
-  AND cemetery.name = 'Cogon Cemetery'
-  AND cemetery.barangay = 'Cogon'
-  AND cemetery.municipality = 'Cordova'
-  AND cemetery.province = 'Cebu'
-  AND record.full_name = 'Rogelio P. Torrejas'
-  AND NOT EXISTS (
-    SELECT 1
-    FROM burial_records existing
-    WHERE existing.cemetery_id = cemetery.id
-      AND existing.full_name = 'Rogelio P. Torresjas'
-  );
-
-UPDATE burial_records record
-SET full_name = 'Ethan Cullen A Escabas'
-FROM cemeteries cemetery
-WHERE record.cemetery_id = cemetery.id
-  AND cemetery.name = 'Cogon Cemetery'
-  AND cemetery.barangay = 'Cogon'
-  AND cemetery.municipality = 'Cordova'
-  AND cemetery.province = 'Cebu'
-  AND record.full_name = 'Ethan Cullen A. Escabas'
-  AND NOT EXISTS (
-    SELECT 1
-    FROM burial_records existing
-    WHERE existing.cemetery_id = cemetery.id
-      AND existing.full_name = 'Ethan Cullen A Escabas'
-  );
-
-DELETE FROM burial_records record
-USING cemeteries cemetery
-WHERE record.cemetery_id = cemetery.id
-  AND cemetery.name = 'Cogon Cemetery'
-  AND cemetery.barangay = 'Cogon'
-  AND cemetery.municipality = 'Cordova'
-  AND cemetery.province = 'Cebu'
-  AND record.full_name = 'Ethan Cullen A. Escabas'
-  AND EXISTS (
-    SELECT 1
-    FROM burial_records existing
-    WHERE existing.cemetery_id = cemetery.id
-      AND existing.full_name = 'Ethan Cullen A Escabas'
-  );
-
-INSERT INTO burial_records (cemetery_id, full_name)
-SELECT cemetery.id, seed.full_name
-FROM cemeteries cemetery
-CROSS JOIN (VALUES
-  ('Dennis B. Ebon'),
-  ('Amparo D. Ebon'),
-  ('Bernandino C. Gorro'),
-  ('Robarl P. Diangga'),
-  ('Lurohama M. Mepieza'),
-  ('Susana B. Manago'),
-  ('Claire Y. Bantong'),
-  ('Florencio T. Jumao-as'),
-  ('Luciana M. Antiya'),
-  ('Aniceto T. Sablano'),
-  ('Leodegario A. Tecson'),
-  ('Marjorie Mae J. Pacaldo'),
-  ('Antonio Bacus'),
-  ('Marina B. Orito'),
-  ('Proceso D. Pogoy'),
-  ('Jasmin U. Generalao'),
-  ('Efren D. Urot'),
-  ('Gregoriod Wahing'),
-  ('Juliana T. Pogoy'),
-  ('Silvestra D. Wahing'),
-  ('Romero B. Salera'),
-  ('Richard P. Bonghanoy'),
-  ('Francisca G. Anzano'),
-  ('Joseph Bladelino B. Berido'),
-  ('Renaldo A. Damaigo'),
-  ('Lavian O. Sebusa'),
-  ('Ranilo C. Andales'),
-  ('Marites I. Denlauso'),
-  ('Francisca A. Tirol'),
-  ('Welma T. Ornopia'),
-  ('Antonio S. Montecillo'),
-  ('Welfrido T. Pogoy'),
-  ('Renerio P. Amoren'),
-  ('Catherine L. Abad'),
-  ('Dolores S. Silawan'),
-  ('Esterlita Benigay'),
-  ('Cirilo Pungcol Jr'),
-  ('Dominga C. Placencia'),
-  ('Leonilo I. Cañete'),
-  ('Maximo Guzman Roca Jr'),
-  ('Nathalie Grace P. Reffule'),
-  ('Apolonio P. Cañete'),
-  ('Avangeline C. Cañete'),
-  ('Zayden Jireh B. Dinoy'),
-  ('Fujiko P. Ligan'),
-  ('Ethan Cullen A Escabas'),
-  ('Rogelio P. Torresjas'),
-  ('Esabela Arong Pogoy'),
-  ('Circiaca B. Racal'),
-  ('Mary Clarie G. Libre'),
-  ('James B. Bayta'),
-  ('Vicente S. Andales'),
-  ('Merlita C. Ylanan'),
-  ('Bienvenido Celadis'),
-  ('Lareauno C. Abalde'),
-  ('Teresita P. Torrejas'),
-  ('Sherwin D. Bioco'),
-  ('Jenny P. Mativo'),
-  ('MaryJane C. Mintalar'),
-  ('Federico T. Espinosa'),
-  ('Princess Rhiana T. Cañete'),
-  ('Antonio C. Wahing'),
-  ('Basilisa Maislim Esparcia'),
-  ('Juana Miano'),
-  ('Grechen Simangca'),
-  ('Alfredo M. Seno'),
-  ('Guilermo N. Dinoy'),
-  ('Ferdinan I. Escabas'),
-  ('Crisanto N. Dinoy'),
-  ('Timoteo O. Baguio'),
-  ('Antero A. Baguio'),
-  ('Lewey T. Deguilmo')
-) AS seed(full_name)
-WHERE cemetery.name = 'Cogon Cemetery'
-  AND cemetery.barangay = 'Cogon'
-  AND cemetery.municipality = 'Cordova'
-  AND cemetery.province = 'Cebu'
-ON CONFLICT (cemetery_id, full_name) DO NOTHING;
+-- Burial records are real operational data. Staff and administrators add them
+-- through the console; the schema no longer seeds sample names.

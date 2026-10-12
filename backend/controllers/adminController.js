@@ -1,4 +1,6 @@
 const pool = require('../config/db');
+const { purgeDemoData } = require('../database/purgeDemoData');
+const bcrypt = require('bcryptjs');
 
 const validateRecord = (body = {}) => {
   const fullName = typeof body.full_name === 'string' ? body.full_name.trim() : '';
@@ -29,7 +31,7 @@ const validateRecord = (body = {}) => {
       graveReference: graveReference || null,
       birthDate,
       deathDate,
-      isDemo: body.is_demo !== false,
+      isDemo: body.is_demo === true,
     },
   };
 };
@@ -210,6 +212,70 @@ const getUsers = async (req, res) => {
   }
 };
 
+const createUser = async (req, res) => {
+  const { name, email, password, role } = req.body || {};
+
+  if (!name || !email || !password) {
+    return res.status(400).json({ message: 'Name, email, and password are required.' });
+  }
+
+  const validRoles = ['user', 'staff', 'admin'];
+  const userRole = validRoles.includes(role) ? role : 'user';
+
+  if (password.length < 8) {
+    return res.status(400).json({ message: 'Password must be at least 8 characters.' });
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ message: 'Enter a valid email address.' });
+  }
+
+  try {
+    const passwordHash = await bcrypt.hash(password, 10);
+    const result = await pool.query(
+      `INSERT INTO users (name, email, password_hash, role, onboarding_completed, auth_version)
+       VALUES ($1, $2, $3, $4, TRUE, 0)
+       RETURNING id, name, email, role, created_at`,
+      [name, email, passwordHash, role]
+    );
+
+    const user = result.rows[0];
+    res.status(201).json({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      created_at: user.created_at,
+    });
+  } catch (error) {
+    if (error.code === '23505') {
+      return res.status(409).json({ message: 'An account with that email already exists.' });
+    }
+    console.error('Create user error:', error);
+    res.status(500).json({ message: 'Unable to create user account.' });
+  }
+};
+
+const purgeDemo = async (req, res) => {
+  try {
+    const result = await purgeDemoData(pool, { confirm: (req.body || {}).confirm === true });
+    if (!result.confirmed) {
+      return res.status(400).json({
+        message: 'Confirmation required. Re-send this request with { "confirm": true } to delete the demo content listed in the preview.',
+        preview: result.preview,
+      });
+    }
+    res.json({
+      message: 'Demo content removed. The system now runs on real data only.',
+      deleted: result.deleted,
+      remaining: result.remaining,
+    });
+  } catch (error) {
+    console.error('Purge demo data error:', error);
+    res.status(500).json({ message: 'Unable to remove demo data.' });
+  }
+};
+
 module.exports = {
   getDashboard,
   getRecords,
@@ -218,4 +284,6 @@ module.exports = {
   getReservations,
   getReports,
   getUsers,
+  createUser,
+  purgeDemo,
 };

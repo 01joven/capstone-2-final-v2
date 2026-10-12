@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import Layout from '../components/Layout';
-import { adminAPI } from '../services/api';
+import { adminAPI, staffAPI } from '../services/api';
 import './AdminPortal.css';
 
 const initialRecord = {
@@ -9,7 +9,7 @@ const initialRecord = {
   grave_reference: '',
   birth_date: '',
   death_date: '',
-  is_demo: true,
+  is_demo: false,
 };
 
 const formatDate = (date) => {
@@ -18,9 +18,13 @@ const formatDate = (date) => {
   return Number.isNaN(parsed.getTime()) ? '—' : parsed.toLocaleDateString();
 };
 
-const AdminPortal = () => {
+const AdminPortal = ({ scope = 'admin' }) => {
   const { pathname } = useLocation();
+  const api = scope === 'staff' ? staffAPI : adminAPI;
+  const loadingLabel = scope === 'staff' ? 'Loading staff workspace data...' : 'Loading administrator data...';
+  const loadErrorLabel = scope === 'staff' ? 'Could not load staff workspace data.' : 'Could not load administrator data.';
   const [data, setData] = useState(null);
+  const [loadedView, setLoadedView] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -32,20 +36,30 @@ const AdminPortal = () => {
   useEffect(() => {
     let active = true;
     const loaders = {
-      dashboard: adminAPI.getDashboard,
-      records: adminAPI.getRecords,
-      reservations: adminAPI.getReservations,
-      reports: adminAPI.getReports,
-      users: adminAPI.getUsers,
+      dashboard: api.getDashboard,
+      records: api.getRecords,
+      reservations: api.getReservations,
+      reports: api.getReports,
+      users: api.getUsers,
     };
     const load = async () => {
       setLoading(true);
       setError('');
+      if (typeof loaders[view] !== 'function') {
+        if (active) {
+          setError(scope === 'staff' ? 'That section is not available in the staff console.' : 'That section is not available.');
+          setLoading(false);
+        }
+        return;
+      }
       try {
         const { data: responseData } = await loaders[view]();
-        if (active) setData(responseData);
+        if (active) {
+          setData(responseData);
+          setLoadedView(view);
+        }
       } catch (loadError) {
-        if (active) setError(loadError.response?.data?.message || 'Could not load administrator data.');
+        if (active) setError(loadError.response?.data?.message || loadErrorLabel);
       } finally {
         if (active) setLoading(false);
       }
@@ -73,9 +87,9 @@ const AdminPortal = () => {
       }
       if (!payload.is_demo) payload.verified_authorized = true;
       if (recordForm.id) {
-        await adminAPI.updateRecord(recordForm.id, payload);
+        await api.updateRecord(recordForm.id, payload);
       } else {
-        await adminAPI.createRecord(payload);
+        await api.createRecord(payload);
       }
       setRecordForm(null);
       refresh();
@@ -95,13 +109,15 @@ const AdminPortal = () => {
     is_demo: record.is_demo,
   });
 
+  const ready = !loading && !error && data !== null && loadedView === view;
+
   return (
     <Layout>
       <div className="page-container admin-page">
-        {loading && <p className="search-empty">Loading administrator data...</p>}
         {error && <p className="error-msg" role="alert">{error}</p>}
-        {!loading && !error && view === 'dashboard' && <Dashboard data={data} />}
-        {!loading && !error && view === 'records' && (
+        {!error && !ready && <p className="search-empty">{loadingLabel}</p>}
+        {ready && view === 'dashboard' && <Dashboard data={data} scope={scope} />}
+        {ready && view === 'records' && (
           <Records
             records={data}
             recordForm={recordForm}
@@ -111,27 +127,30 @@ const AdminPortal = () => {
             saving={saving}
           />
         )}
-        {!loading && !error && view === 'reservations' && <Reservations reservations={data} />}
-        {!loading && !error && view === 'reports' && <Reports report={data} />}
-        {!loading && !error && view === 'users' && <Users users={data} />}
+        {ready && view === 'reservations' && <Reservations reservations={data} />}
+        {ready && view === 'reports' && <Reports report={data} />}
+        {ready && view === 'users' && <Users users={data} />}
       </div>
     </Layout>
   );
 };
 
-const Dashboard = ({ data }) => (
+const Dashboard = ({ data, scope = 'admin' }) => {
+  const base = scope === 'staff' ? '/staff' : '/admin';
+  const cards = [
+    ['Memorial Records', data?.records ?? 0, `${base}/records`],
+    ['Reservations', data?.reservations ?? 0, `${base}/reservations`],
+    ...(scope === 'staff' ? [] : [['User Accounts', data?.users ?? 0, '/admin/users']]),
+    ['Payments to Verify', data?.pending_payments ?? 0, '/payments?tab=review'],
+  ];
+  return (
   <>
-    <h1 className="page-title">Admin Dashboard</h1>
+    <h1 className="page-title">{scope === 'staff' ? 'Staff Dashboard' : 'Admin Dashboard'}</h1>
     <p className="admin-provenance-note">
-      Use only cemetery data you are authorized to publish. Placeholder records and unverified locations remain marked Sample / Demo Data.
+      Use only cemetery data you are authorized to publish. Records are saved as real data by default; mark an entry as sample only for test data.
     </p>
     <div className="admin-stat-grid">
-      {[
-        ['Memorial Records', data.records, '/admin/records'],
-        ['Reservations', data.reservations, '/admin/reservations'],
-        ['User Accounts', data.users, '/admin/users'],
-        ['Payments to Verify', data.pending_payments, '/payments?tab=review'],
-      ].map(([label, value, to]) => (
+      {cards.map(([label, value, to]) => (
         <Link className="admin-stat-card card" to={to} key={label}>
           <span>{label}</span><strong>{value}</strong>
         </Link>
@@ -139,11 +158,12 @@ const Dashboard = ({ data }) => (
     </div>
     <div className="admin-panel card">
       <h2>Data provenance</h2>
-      <p>{data.demo_records} of {data.records} burial records are currently marked as sample/demo.</p>
+      <p>{data?.demo_records ?? 0} of {data?.records ?? 0} burial records are currently marked as sample data.</p>
       <p>Mark a record as verified only after confirming its source and authorization.</p>
     </div>
   </>
-);
+  );
+};
 
 const Records = ({ records, recordForm, setRecordForm, startEditing, saveRecord, saving }) => (
   <>
@@ -152,7 +172,7 @@ const Records = ({ records, recordForm, setRecordForm, startEditing, saveRecord,
       {!recordForm && <button className="btn btn-primary" type="button" onClick={() => setRecordForm({ ...initialRecord })}>Add Record</button>}
     </div>
     <p className="admin-provenance-note">
-      New records are Sample / Demo Data by default. Only remove that label when the record is verified and its publication is authorized.
+      Records are saved as real cemetery data by default. Tick the sample box only for test entries; never publish unverified sample data as real.
     </p>
     {recordForm && (
       <form className="admin-form card" onSubmit={saveRecord}>
@@ -162,8 +182,8 @@ const Records = ({ records, recordForm, setRecordForm, startEditing, saveRecord,
         <label>Date of birth<input type="date" value={recordForm.birth_date} onChange={(event) => setRecordForm({ ...recordForm, birth_date: event.target.value })} /></label>
         <label>Date of death<input type="date" value={recordForm.death_date} onChange={(event) => setRecordForm({ ...recordForm, death_date: event.target.value })} /></label>
         <label className="admin-checkbox-label">
-          <input type="checkbox" checked={!recordForm.is_demo} onChange={(event) => setRecordForm({ ...recordForm, is_demo: !event.target.checked })} />
-          I confirm this record is verified and authorized for publication
+          <input type="checkbox" checked={recordForm.is_demo} onChange={(event) => setRecordForm({ ...recordForm, is_demo: event.target.checked })} />
+          Save as sample/test data (not a real published record)
         </label>
         <div className="admin-form-actions">
           <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Saving...' : 'Save Record'}</button>
@@ -175,7 +195,7 @@ const Records = ({ records, recordForm, setRecordForm, startEditing, saveRecord,
       <table className="admin-table">
         <thead><tr><th>Record</th><th>Cemetery</th><th>Grave reference</th><th>Dates</th><th>Data status</th><th /></tr></thead>
         <tbody>
-          {records.map((record) => (
+          {(records || []).map((record) => (
             <tr key={record.id}>
               <td>MR-{String(record.id).padStart(4, '0')}<br />{record.full_name}</td>
               <td>{record.cemetery_name}</td>
@@ -185,7 +205,7 @@ const Records = ({ records, recordForm, setRecordForm, startEditing, saveRecord,
               <td><button type="button" className="btn btn-outline" onClick={() => startEditing(record)}>Edit</button></td>
             </tr>
           ))}
-          {records.length === 0 && <tr><td colSpan="6">No memorial records available.</td></tr>}
+          {(records || []).length === 0 && <tr><td colSpan="6">No memorial records available.</td></tr>}
         </tbody>
       </table>
     </div>
@@ -199,7 +219,7 @@ const Reservations = ({ reservations }) => (
       <table className="admin-table">
         <thead><tr><th>Visitor</th><th>Memorial</th><th>Visit date</th><th>Payment</th><th>Status</th><th>Total</th></tr></thead>
         <tbody>
-          {reservations.map((reservation) => (
+          {(reservations || []).map((reservation) => (
             <tr key={reservation.id}>
               <td>{reservation.visitor_name}<br /><small>{reservation.account_email}</small></td>
               <td>{reservation.memorial_name}</td>
@@ -209,7 +229,7 @@ const Reservations = ({ reservations }) => (
               <td>₱{Number(reservation.total_price).toLocaleString()}</td>
             </tr>
           ))}
-          {reservations.length === 0 && <tr><td colSpan="6">No reservations have been submitted.</td></tr>}
+          {(reservations || []).length === 0 && <tr><td colSpan="6">No reservations have been submitted.</td></tr>}
         </tbody>
       </table>
     </div>
@@ -218,21 +238,24 @@ const Reservations = ({ reservations }) => (
 );
 
 const Reports = ({ report }) => {
-  const maxMonthly = Math.max(1, ...report.monthly_reservations.map((month) => Number(month.total)));
+  const monthly = report?.monthly_reservations || [];
+  const byStatus = report?.reservations_by_status || [];
+  const totals = report?.totals || {};
+  const maxMonthly = Math.max(1, ...monthly.map((month) => Number(month.total) || 0));
   return (
     <>
       <h1 className="page-title">Reports</h1>
       <p className="admin-provenance-note">Live totals from saved application records; no sample values are added to these reports.</p>
       <div className="admin-stat-grid">
-        <div className="admin-stat-card card"><span>Total reservations</span><strong>{report.totals.total_reservations}</strong></div>
-        <div className="admin-stat-card card"><span>Confirmed reservations</span><strong>{report.totals.confirmed_reservations}</strong></div>
-        <div className="admin-stat-card card"><span>Pending reservations</span><strong>{report.totals.pending_reservations}</strong></div>
-        <div className="admin-stat-card card"><span>Confirmed reservation value</span><strong>₱{Number(report.totals.confirmed_value).toLocaleString()}</strong></div>
+        <div className="admin-stat-card card"><span>Total reservations</span><strong>{totals.total_reservations ?? 0}</strong></div>
+        <div className="admin-stat-card card"><span>Confirmed reservations</span><strong>{totals.confirmed_reservations ?? 0}</strong></div>
+        <div className="admin-stat-card card"><span>Pending reservations</span><strong>{totals.pending_reservations ?? 0}</strong></div>
+        <div className="admin-stat-card card"><span>Confirmed reservation value</span><strong>₱{Number(totals.confirmed_value ?? 0).toLocaleString()}</strong></div>
       </div>
       <section className="admin-panel card">
         <h2>Reservations by month (last 6 months)</h2>
         <div className="admin-bars">
-          {report.monthly_reservations.map((month) => (
+          {monthly.map((month) => (
             <div className="admin-bar-row" key={month.month}>
               <span>{month.month}</span>
               <div><i style={{ width: `${(Number(month.total) / maxMonthly) * 100}%` }} /></div>
@@ -243,33 +266,94 @@ const Reports = ({ report }) => {
       </section>
       <section className="admin-panel card">
         <h2>Reservation status</h2>
-        <ul>{report.reservations_by_status.map((item) => <li key={item.status}>{item.status}: {item.total}</li>)}</ul>
+        <ul>{byStatus.map((item) => <li key={item.status}>{item.status}: {item.total}</li>)}</ul>
       </section>
     </>
   );
 };
 
-const Users = ({ users }) => (
-  <>
-    <h1 className="page-title">User Management</h1>
-    <p className="admin-provenance-note">
-      Account details are visible only to administrators. New admin access must be granted through the trusted administrator promotion procedure; this screen does not promote accounts.
-    </p>
-    <div className="admin-table-wrap card">
-      <table className="admin-table">
-        <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Joined</th><th>Reservations</th><th>Saved memorials</th></tr></thead>
-        <tbody>
-          {users.map((user) => (
-            <tr key={user.id}>
-              <td>{user.name}</td><td>{user.email}</td><td>{user.role}</td>
-              <td>{formatDate(user.created_at)}</td><td>{user.reservations}</td><td>{user.saved_memorials}</td>
-            </tr>
-          ))}
-          {users.length === 0 && <tr><td colSpan="6">No user accounts available.</td></tr>}
-        </tbody>
-      </table>
-    </div>
-  </>
-);
+const Users = ({ users }) => {
+  const [showModal, setShowModal] = useState(false);
+  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'user' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSaving(true);
+    try {
+      await adminAPI.createUser(form);
+      setShowModal(false);
+      setForm({ name: '', email: '', password: '', role: 'user' });
+      setError('');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to create user.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="admin-heading-row">
+        <h1 className="page-title">User Management</h1>
+        <button className="btn btn-primary" type="button" onClick={() => setShowModal(true)}>Add User</button>
+      </div>
+      <p className="admin-provenance-note">
+        Account details are visible only to administrators. New admin access must be granted through the trusted administrator promotion procedure; this screen does not promote accounts.
+      </p>
+      <div className="admin-table-wrap card">
+        <table className="admin-table">
+          <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Joined</th><th>Reservations</th><th>Saved memorials</th></tr></thead>
+          <tbody>
+            {(users || []).map((user) => (
+              <tr key={user.id}>
+                <td>{user.name}</td><td>{user.email}</td><td>{user.role}</td>
+                <td>{formatDate(user.created_at)}</td><td>{user.reservations}</td><td>{user.saved_memorials}</td>
+              </tr>
+            ))}
+            {(users || []).length === 0 && <tr><td colSpan="6">No user accounts available.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      {showModal && (
+        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Create New User</h2>
+            <form onSubmit={handleSubmit}>
+              <div className="form-group">
+                <label htmlFor="user-name">Name</label>
+                <input id="user-name" type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required maxLength={100} />
+              </div>
+              <div className="form-group">
+                <label htmlFor="user-email">Email</label>
+                <input id="user-email" type="email" autoComplete="off" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
+              </div>
+              <div className="form-group">
+                <label htmlFor="user-password">Password</label>
+                <input id="user-password" type="password" autoComplete="new-password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required minLength={8} />
+              </div>
+              <div className="form-group">
+                <label htmlFor="user-role">Role</label>
+                <select id="user-role" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
+                  <option value="user">User</option>
+                  <option value="staff">Staff</option>
+                  <option value="admin">Administrator</option>
+                </select>
+              </div>
+              {error && <p className="error-msg" role="alert">{error}</p>}
+              <div className="admin-form-actions">
+                <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Creating...' : 'Create User'}</button>
+                <button className="btn btn-outline" type="button" onClick={() => setShowModal(false)}>Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
 
 export default AdminPortal;

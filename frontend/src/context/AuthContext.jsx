@@ -33,18 +33,24 @@ export const AuthProvider = ({ children }) => {
     return data.user;
   };
 
-  const requestUserVerificationCode = async (name, email, password) => {
-    const { data } = await authAPI.sendUserRegistrationCode({ name, email, password });
-    return data;
+  const loginStaff = async (email, password) => {
+    const { data } = await authAPI.staffLogin({ email, password });
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('user', JSON.stringify(data.user));
+    setUser(data.user);
+    return data.user;
   };
 
-  const register = async (name, email, password, verificationCode) => {
-    const { data } = await authAPI.register({
-      name,
-      email,
-      password,
-      verification_code: verificationCode,
-    });
+  const registerStaff = async (name, email, password) => {
+    const { data } = await authAPI.staffAPI.staffRegister({ name, email, password });
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('user', JSON.stringify(data.user));
+    setUser(data.user);
+    return data.user;
+  };
+
+  const register = async (name, email, password) => {
+    const { data } = await authAPI.register({ name, email, password });
     localStorage.setItem('token', data.token);
     localStorage.setItem('user', JSON.stringify(data.user));
     setUser(data.user);
@@ -63,7 +69,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, loginAdmin, register, requestUserVerificationCode, logout, updateUser, loading }}>
+    <AuthContext.Provider value={{ user, login, loginAdmin, loginStaff, register, registerStaff, logout, updateUser, loading }}>
       {children}
     </AuthContext.Provider>
   );

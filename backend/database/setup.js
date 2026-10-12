@@ -6,7 +6,7 @@ const setupDatabase = async () => {
   const schemaPath = path.join(__dirname, 'schema.sql');
   const schema = fs.readFileSync(schemaPath, 'utf8');
   await pool.exec(schema);
-  console.log('Database tables and sample memorials are ready.');
+  console.log('Database tables and reference data are ready.');
 };
 
 setupDatabase()

@@ -19,6 +19,9 @@ const Login = () => {
       if (user.is_admin) {
         logout();
         setError('Please use Administrator Login to access the admin dashboard.');
+      } else if (user.is_staff) {
+        logout();
+        setError('Please use Staff Login to access the staff console.');
       } else if (!user.onboarding_completed) {
         navigate('/onboarding');
       } else {
@@ -37,14 +40,14 @@ const Login = () => {
       promptTitle="Login"
       promptDescription="Enter your account details to continue."
     >
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} autoComplete="off">
           <div className="form-group">
             <label htmlFor="login-email">Email</label>
-            <input id="login-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            <input id="login-email" type="email" autoComplete="off" value={email} onChange={(e) => setEmail(e.target.value)} required />
           </div>
           <div className="form-group">
             <label htmlFor="login-password">Password</label>
-            <input id="login-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+            <input id="login-password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
           </div>
           {error && <p className="error-msg">{error}</p>}
           <button type="submit" className="btn btn-primary auth-btn">Login</button>
@@ -55,6 +58,9 @@ const Login = () => {
         </p>
         <Link to="/admin/login" className="btn btn-outline auth-admin-link">
           Administrator Access
+        </Link>
+        <Link to="/staff/login" className="btn btn-outline auth-admin-link">
+          Staff Access
         </Link>
     </AuthLayout>
   );

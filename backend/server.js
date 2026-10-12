@@ -14,6 +14,7 @@ const favoriteRoutes = require('./routes/favorites');
 const paymentRoutes = require('./routes/payments');
 const burialRoutes = require('./routes/burials');
 const adminRoutes = require('./routes/admin');
+const staffRoutes = require('./routes/staff');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -38,6 +39,7 @@ app.use('/api/favorites', favoriteRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/burials', burialRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/staff', staffRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ message: 'Route not found.' });
@@ -90,6 +92,8 @@ const validateEnvironment = () => {
   }
 };
 
+const { ensureSeedAdmin } = require('./database/seedAdmin');
+
 const startServer = async () => {
   validateEnvironment();
   const schema = fs.readFileSync(path.join(__dirname, 'database', 'schema.sql'), 'utf8');
@@ -116,6 +120,11 @@ const startServer = async () => {
   const missingTables = requiredTables.filter((table) => !existingTables.has(table));
   if (missingTables.length > 0) {
     throw new Error(`Database tables are missing (${missingTables.join(', ')}). Run "npm run db:setup" from the project root.`);
+  }
+
+  const adminSeedResult = await ensureSeedAdmin();
+  if (adminSeedResult.created) {
+    console.log(`Seeded default admin account: ${adminSeedResult.user.email}`);
   }
 
   const server = app.listen(PORT, () => {

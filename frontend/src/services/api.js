@@ -14,11 +14,9 @@ API.interceptors.request.use((config) => {
 
 export const authAPI = {
   register: (data) => API.post('/auth/register', data),
-  sendUserRegistrationCode: (data) => API.post('/auth/register-code', data),
   login: (data) => API.post('/auth/login', data),
   adminLogin: (data) => API.post('/auth/admin/login', data),
-  requestAdminPasswordReset: (email) => API.post('/auth/admin/recovery/request', { email }),
-  resetAdminPassword: (data) => API.post('/auth/admin/recovery/reset', data),
+  staffLogin: (data) => API.post('/auth/staff/login', data),
 };
 
 export const userAPI = {
@@ -67,6 +65,18 @@ export const adminAPI = {
   getReservations: () => API.get('/admin/reservations'),
   getReports: () => API.get('/admin/reports'),
   getUsers: () => API.get('/admin/users'),
+  createUser: (data) => API.post('/admin/users', data),
+  purgeDemo: (confirm) => API.post('/admin/maintenance/purge-demo', { confirm }),
+};
+
+export const staffAPI = {
+  getDashboard: () => API.get('/staff/dashboard'),
+  getRecords: () => API.get('/staff/records'),
+  createRecord: (data) => API.post('/staff/records', data),
+  updateRecord: (id, data) => API.put(`/staff/records/${id}`, data),
+  getReservations: () => API.get('/staff/reservations'),
+  getReports: () => API.get('/staff/reports'),
+  staffRegister: (data) => API.post('/auth/register', data),
 };
 
 export default API;

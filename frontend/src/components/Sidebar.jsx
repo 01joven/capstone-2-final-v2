@@ -17,6 +17,15 @@ const Sidebar = () => {
       { to: '/admin/security', label: 'Account Security', icon: '🔐' },
       { to: '/payments?tab=review', label: 'Verify Payments', icon: '✅' },
     ]
+    : user?.is_staff
+    ? [
+      { to: '/staff/dashboard', label: 'Dashboard', icon: '🏠' },
+      { to: '/staff/records', label: 'Memorial Records', icon: '📋' },
+      { to: '/staff/map', label: 'Cemetery Map / Plots', icon: '🗺️' },
+      { to: '/staff/reservations', label: 'Reservations', icon: '📅' },
+      { to: '/staff/reports', label: 'Reports', icon: '📈' },
+      { to: '/payments?tab=review', label: 'Verify Payments', icon: '✅' },
+    ]
     : [
       { to: '/dashboard', label: 'Home', icon: '🏠' },
       { to: '/search', label: 'Search', icon: '🔍' },
@@ -30,11 +39,11 @@ const Sidebar = () => {
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
-        <NavLink to={user?.is_admin ? '/admin/dashboard' : '/dashboard'} className="sidebar-brand-link" aria-label="Cogon Memorial Records System dashboard">
+        <NavLink to={user?.is_admin ? '/admin/dashboard' : user?.is_staff ? '/staff/dashboard' : '/dashboard'} className="sidebar-brand-link" aria-label="Cogon Memorial Records System dashboard">
           <MemorialLogo className="memorial-logo sidebar-logo" />
           <span>
             <strong>Cogon Memorial</strong>
-            <small>{user?.is_admin ? 'Admin Console' : 'Records System'}</small>
+            <small>{user?.is_admin ? 'Admin Console' : user?.is_staff ? 'Staff Console' : 'Records System'}</small>
           </span>
         </NavLink>
       </div>

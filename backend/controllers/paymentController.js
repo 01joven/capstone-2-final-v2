@@ -84,7 +84,7 @@ const createPayment = async (req, res) => {
     if (existingPayment?.payment_status === 'pending_verification') {
       await client.query('ROLLBACK');
       transactionStarted = false;
-      return res.status(409).json({ message: 'Your payment is already submitted and waiting for admin verification.' });
+      return res.status(409).json({ message: 'Your payment is already submitted and waiting for verification.' });
     }
     if (existingPayment?.payment_status === 'completed') {
       await client.query('ROLLBACK');

@@ -30,14 +30,14 @@ const AdminLogin = () => {
       promptTitle="Administrator Access"
       promptDescription="Sign in with an authorized administrator email and password."
     >
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} autoComplete="off">
         <div className="form-group">
           <label htmlFor="admin-login-email">Email</label>
-          <input id="admin-login-email" type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} required />
+          <input id="admin-login-email" type="email" autoComplete="off" value={email} onChange={(event) => setEmail(event.target.value)} required />
         </div>
         <div className="form-group">
           <label htmlFor="admin-login-password">Password</label>
-          <input id="admin-login-password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required />
+          <input id="admin-login-password" type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} required />
         </div>
         <p className="auth-switch admin-forgot-link">
           <Link to="/admin/recovery">Forgot Password / Account Recovery?</Link>

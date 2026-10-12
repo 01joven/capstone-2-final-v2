@@ -35,8 +35,10 @@ const Payments = () => {
     setPendingReservation(foundReservation || null);
   }, [searchParams]);
 
+  const canReviewPayments = user?.is_admin || user?.is_staff;
+
   const loadPendingVerifications = useCallback(async () => {
-    if (!user?.is_admin) return;
+    if (!canReviewPayments) return;
     setAdminError('');
     try {
       const { data } = await paymentAPI.getPendingVerifications();
@@ -44,7 +46,7 @@ const Payments = () => {
     } catch (loadError) {
       setAdminError(loadError.response?.data?.message || 'Could not load payments awaiting verification.');
     }
-  }, [user?.is_admin]);
+  }, [canReviewPayments]);
 
   useEffect(() => {
     const loadPage = async () => {
@@ -187,7 +189,7 @@ const Payments = () => {
                     <button className="btn btn-primary" type="submit" disabled={isSubmitting}>
                       {isSubmitting ? 'Submitting...' : 'Submit for Verification'}
                     </button>
-                    <p>Do not submit until the transfer is complete. The reservation stays pending until an administrator verifies it.</p>
+                    <p>Do not submit until the transfer is complete. The reservation stays pending until a staff member verifies it.</p>
                   </form>
                 )}
               </>
@@ -195,7 +197,7 @@ const Payments = () => {
           </section>
         )}
 
-        {user?.is_admin && (
+        {canReviewPayments && (
           <section className="admin-payment-review" aria-labelledby="payment-review-title">
             <h2 id="payment-review-title" className="section-title">Payment Verification Queue</h2>
             {adminError && <p className="error-msg" role="alert">{adminError}</p>}

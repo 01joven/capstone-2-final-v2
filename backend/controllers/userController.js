@@ -25,6 +25,7 @@ const getProfile = async (req, res) => {
     res.json({
       ...result.rows[0],
       is_admin: result.rows[0].role === 'admin',
+      is_staff: result.rows[0].role === 'staff',
       stats: {
         reservations: parseInt(reservations.rows[0].count),
         saved: parseInt(saved.rows[0].count),
