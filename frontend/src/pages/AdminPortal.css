@@ -1,0 +1,188 @@
+.admin-page {
+  max-width: 1440px;
+}
+
+.admin-heading-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.admin-provenance-note {
+  padding: 14px 16px;
+  margin: 0 0 20px;
+  border: 1px solid #ead5ad;
+  border-radius: 12px;
+  background: #fff8e9;
+  color: #735a2c;
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+
+.admin-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.admin-stat-card {
+  display: grid;
+  gap: 10px;
+  padding: 22px;
+  color: var(--secondary);
+}
+
+.admin-stat-card span {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.admin-stat-card strong {
+  font-size: 1.8rem;
+}
+
+.admin-panel,
+.admin-form {
+  padding: 22px;
+  margin-bottom: 20px;
+}
+
+.admin-panel h2,
+.admin-form h2 {
+  color: var(--secondary);
+  font-size: 1.15rem;
+  margin-bottom: 14px;
+}
+
+.admin-panel p,
+.admin-panel li {
+  margin-top: 8px;
+  color: var(--text-muted);
+}
+
+.admin-table-wrap {
+  margin: 18px 0;
+  overflow-x: auto;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  white-space: normal;
+}
+
+.admin-table th {
+  color: var(--secondary);
+  background: var(--surface-soft);
+  font-size: 0.86rem;
+}
+
+.admin-table td {
+  color: var(--text);
+  font-size: 0.88rem;
+}
+
+.admin-table small {
+  color: var(--text-muted);
+}
+
+.admin-status {
+  display: inline-block;
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.admin-status.demo {
+  background: #fff4dc;
+  color: #7a590f;
+}
+
+.admin-status.verified {
+  background: #d6f1e0;
+  color: #1f6f45;
+}
+
+.admin-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.admin-form h2,
+.admin-checkbox-label,
+.admin-form-actions {
+  grid-column: 1 / -1;
+}
+
+.admin-form > label:not(.admin-checkbox-label) {
+  display: grid;
+  gap: 8px;
+  color: var(--secondary);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.admin-checkbox-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--secondary);
+  font-size: 0.9rem;
+}
+
+.admin-checkbox-label input {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+}
+
+.admin-form-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.admin-bars {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-bar-row {
+  display: grid;
+  grid-template-columns: 90px minmax(100px, 1fr) 32px;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.admin-bar-row > div {
+  height: 12px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  overflow: hidden;
+}
+
+.admin-bar-row i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+@media (max-width: 700px) {
+  .admin-form {
+    grid-template-columns: 1fr;
+  }
+}

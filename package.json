@@ -1,0 +1,17 @@
+{
+  "name": "memorial-map",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n backend,frontend \"npm run dev --workspace=memorial-map-backend\" \"npm run dev --workspace=memorial-map-frontend\"",
+    "db:setup": "npm run db:setup --workspace=memorial-map-backend",
+    "admin:promote": "npm run admin:promote --workspace=memorial-map-backend --",
+    "admin:change-email": "npm run admin:change-email --workspace=memorial-map-backend --"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

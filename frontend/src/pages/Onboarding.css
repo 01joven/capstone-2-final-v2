@@ -1,0 +1,88 @@
+.onboarding-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, #f7efe3 0%, #f1e7d8 100%);
+  padding: 24px;
+}
+
+.onboarding-card {
+  max-width: 540px;
+  width: 100%;
+  padding: 44px 36px;
+  text-align: center;
+}
+
+.onboarding-steps {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 30px;
+}
+
+.step-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(106, 71, 48, 0.22);
+  transition: all 0.3s ease;
+}
+
+.step-dot.active {
+  background: var(--primary);
+  width: 30px;
+  border-radius: 12px;
+}
+
+.onboarding-icon {
+  font-size: 3.2rem;
+  margin-bottom: 18px;
+}
+
+.onboarding-card h2 {
+  color: var(--secondary);
+  margin-bottom: 12px;
+  font-size: 1.8rem;
+}
+
+.onboarding-card p {
+  color: var(--text-muted);
+  margin-bottom: 26px;
+  line-height: 1.8;
+}
+
+.onboarding-features {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 28px;
+}
+
+.onboarding-feature {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px;
+  background: var(--surface-soft);
+  border-radius: 16px;
+  font-size: 0.95rem;
+  color: var(--text-muted);
+}
+
+.onboarding-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  justify-content: center;
+}
+
+.onboarding-actions .btn {
+  min-width: 140px;
+}
+
+@media (max-width: 680px) {
+  .onboarding-features {
+    grid-template-columns: 1fr;
+  }
+}

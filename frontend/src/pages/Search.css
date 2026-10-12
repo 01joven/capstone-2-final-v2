@@ -1,0 +1,98 @@
+.search-bar {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr auto;
+  gap: 18px;
+  padding: 22px;
+  margin-bottom: 32px;
+  align-items: center;
+}
+
+.search-bar input,
+.search-bar select {
+  border-radius: 18px;
+}
+
+.search-bar input {
+  min-width: 220px;
+}
+
+.search-bar select {
+  min-width: 180px;
+}
+
+.search-bar .btn {
+  width: 100%;
+}
+
+.burial-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.burial-result {
+  padding: 18px;
+}
+
+.burial-result h3 {
+  margin: 0 0 8px;
+  color: var(--secondary);
+}
+
+.burial-result > p {
+  margin: 0 0 8px;
+}
+
+.burial-result p {
+  color: var(--text-muted);
+}
+
+.burial-result .demo-location-warning {
+  margin-top: 12px;
+  color: #735a2c;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.burial-result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.burial-result-actions .btn {
+  padding: 9px 13px;
+  font-size: 0.85rem;
+}
+
+.burial-record-details {
+  padding-top: 14px;
+  margin-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.burial-record-details p {
+  margin-bottom: 6px;
+}
+
+.burial-record-details .demo-location-warning {
+  color: #8a6419;
+}
+
+.section-title {
+  margin: 28px 0 16px;
+}
+
+.search-empty {
+  text-align: center;
+  color: var(--text-muted);
+  margin: 20px 0 32px;
+}
+
+@media (max-width: 780px) {
+  .search-bar {
+    grid-template-columns: 1fr;
+  }
+}

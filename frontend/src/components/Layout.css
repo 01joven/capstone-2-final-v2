@@ -1,0 +1,17 @@
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+  background: linear-gradient(180deg, rgba(246,240,233,0.95) 0%, rgba(255,255,255,0.92) 100%);
+}
+
+.app-main {
+  flex: 1;
+  margin-left: 280px;
+  min-height: 100vh;
+}
+
+@media (max-width: 1024px) {
+  .app-main {
+    margin-left: 0;
+  }
+}
