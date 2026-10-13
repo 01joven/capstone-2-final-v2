@@ -298,6 +298,7 @@ const MapView = () => {
                       <div><dt>Date of death</dt><dd>{formatDate(selectedBurial.death_date)}</dd></div>
                       <div><dt>Cemetery</dt><dd>{selectedBurial.cemetery_name}</dd></div>
                     </dl>
+                    {selectedBurial.epitaph && <p><em>“{selectedBurial.epitaph}”</em></p>}
                   </article>
                 )}
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import Layout from '../components/Layout';
-import { adminAPI, reservationAPI, staffAPI } from '../services/api';
+import { adminAPI, reservationAPI, staffAPI, submissionAPI } from '../services/api';
 import usePolling from '../hooks/usePolling';
 import { useAuth } from '../context/AuthContext';
 import './AdminPortal.css';
@@ -11,6 +11,7 @@ const initialRecord = {
   grave_reference: '',
   birth_date: '',
   death_date: '',
+  epitaph: '',
 };
 
 const formatDate = (date) => {
@@ -38,6 +39,7 @@ const AdminPortal = ({ scope = 'admin' }) => {
     dashboard: api.getDashboard,
     records: api.getRecords,
     reservations: api.getReservations,
+    submissions: submissionAPI.all,
     reports: api.getReports,
     users: api.getUsers,
   };
@@ -127,6 +129,7 @@ const AdminPortal = ({ scope = 'admin' }) => {
     grave_reference: record.grave_reference || '',
     birth_date: record.birth_date ? String(record.birth_date).slice(0, 10) : '',
     death_date: record.death_date ? String(record.death_date).slice(0, 10) : '',
+    epitaph: record.epitaph || '',
   });
 
   const ready = !loading && !error && data !== null && loadedView === view;
@@ -153,6 +156,7 @@ const AdminPortal = ({ scope = 'admin' }) => {
           </>
         )}
         {ready && view === 'reservations' && <Reservations reservations={data} onUpdated={refresh} />}
+        {ready && view === 'submissions' && <Submissions submissions={data} onUpdated={refresh} />}
         {ready && view === 'reports' && <Reports report={data} scope={scope} />}
         {ready && view === 'users' && <Users users={data} onCreated={refresh} />}
       </div>
@@ -225,6 +229,7 @@ const Records = ({ records, recordForm, setRecordForm, startEditing, saveRecord,
         <label>Grave reference<input maxLength="100" placeholder="Leave blank if unverified" value={recordForm.grave_reference} onChange={(event) => setRecordForm({ ...recordForm, grave_reference: event.target.value })} /></label>
         <label>Date of birth<input type="date" value={recordForm.birth_date} onChange={(event) => setRecordForm({ ...recordForm, birth_date: event.target.value })} /></label>
         <label>Date of death<input type="date" value={recordForm.death_date} onChange={(event) => setRecordForm({ ...recordForm, death_date: event.target.value })} /></label>
+        <label>Epitaph (optional)<textarea maxLength={500} rows={2} placeholder="Short memorial inscription" value={recordForm.epitaph} onChange={(event) => setRecordForm({ ...recordForm, epitaph: event.target.value })} /></label>
         <div className="admin-form-actions">
           <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Saving...' : 'Save Record'}</button>
           <button className="btn btn-outline" type="button" onClick={() => setRecordForm(null)}>Cancel</button>
@@ -467,6 +472,72 @@ const Reservations = ({ reservations, onUpdated }) => {
         </table>
       </div>
       <Link className="btn btn-primary" to="/payments?tab=review">Review pending payments</Link>
+    </>
+  );
+};
+
+const Submissions = ({ submissions, onUpdated }) => {
+  const [reviewingId, setReviewingId] = useState(null);
+  const [notes, setNotes] = useState({});
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+
+  const review = async (submission, action) => {
+    setReviewingId(submission.id);
+    setError('');
+    setMessage('');
+    try {
+      const { data } = await submissionAPI.review(submission.id, action, notes[submission.id] || undefined);
+      setMessage(data.message);
+      onUpdated();
+    } catch (reviewError) {
+      setError(reviewError.response?.data?.message || 'Could not review this submission.');
+    } finally {
+      setReviewingId(null);
+    }
+  };
+
+  return (
+    <>
+      <h1 className="page-title">Memorial Submissions</h1>
+      <p className="admin-provenance-note">Customer-submitted memorial information. Approving publishes it as a memorial record; rejecting sends it back with a note.</p>
+      {error && <p className="error-msg" role="alert">{error}</p>}
+      {message && <p className="success-msg" role="status">{message}</p>}
+      <div className="admin-table-wrap card">
+        <table className="admin-table">
+          <thead><tr><th>Submitted by</th><th>Departed person</th><th>Dates</th><th>Epitaph</th><th>Status</th><th>Review</th></tr></thead>
+          <tbody>
+            {(submissions || []).map((submission) => (
+              <tr key={submission.id}>
+                <td>{submission.submitter_name}<br /><small>{submission.submitter_email}</small></td>
+                <td>{submission.full_name}<br /><small>Lot: {submission.grave_reference || 'Unassigned'}</small></td>
+                <td>Born: {formatDate(submission.birth_date)}<br />Died: {formatDate(submission.death_date)}</td>
+                <td>{submission.epitaph ? <small><em>“{submission.epitaph}”</em></small> : '—'}</td>
+                <td>{submission.status}{submission.review_note ? <><br /><small>Note: {submission.review_note}</small></> : null}</td>
+                <td>{submission.status === 'pending' ? (
+                  <div className="admin-form-actions">
+                    <input
+                      type="text"
+                      maxLength={500}
+                      placeholder="Note for customer (optional)"
+                      aria-label="Note for customer"
+                      value={notes[submission.id] || ''}
+                      onChange={(event) => setNotes({ ...notes, [submission.id]: event.target.value })}
+                    />
+                    <button type="button" className="btn btn-primary" disabled={reviewingId === submission.id} onClick={() => review(submission, 'approve')}>
+                      {reviewingId === submission.id ? 'Saving...' : 'Approve & Publish'}
+                    </button>
+                    <button type="button" className="btn btn-outline" disabled={reviewingId === submission.id} onClick={() => review(submission, 'reject')}>
+                      Reject
+                    </button>
+                  </div>
+                ) : '—'}</td>
+              </tr>
+            ))}
+            {(submissions || []).length === 0 && <tr><td colSpan="6">No submissions have been made.</td></tr>}
+          </tbody>
+        </table>
+      </div>
     </>
   );
 };

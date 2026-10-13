@@ -12,6 +12,7 @@ const Sidebar = () => {
       { to: '/admin/records', label: 'Memorial Records', icon: '📋' },
       { to: '/admin/map', label: 'Cemetery Map / Plots', icon: '🗺️' },
       { to: '/admin/reservations', label: 'Reservations', icon: '📅' },
+      { to: '/admin/submissions', label: 'Submissions', icon: '📝' },
       { to: '/admin/reports', label: 'Reports', icon: '📈' },
       { to: '/admin/users', label: 'User Management', icon: '👥' },
       { to: '/payments?tab=review', label: 'Verify Payments', icon: '✅' },
@@ -22,6 +23,7 @@ const Sidebar = () => {
       { to: '/staff/records', label: 'Memorial Records', icon: '📋' },
       { to: '/staff/map', label: 'Cemetery Map / Plots', icon: '🗺️' },
       { to: '/staff/reservations', label: 'Reservations', icon: '📅' },
+      { to: '/staff/submissions', label: 'Submissions', icon: '📝' },
       { to: '/staff/reports', label: 'Reports', icon: '📈' },
       { to: '/payments?tab=review', label: 'Verify Payments', icon: '✅' },
     ]
@@ -30,6 +32,7 @@ const Sidebar = () => {
       { to: '/search', label: 'Search', icon: '🔍' },
       { to: '/map', label: 'Map', icon: '🗺️' },
       { to: '/reservations', label: 'Reservations', icon: '📅' },
+      { to: '/submit-record', label: 'Submit Memorial', icon: '📝' },
       { to: '/payments', label: 'Payments', icon: '💳' },
       { to: '/saved', label: 'Saved Memorials', icon: '❤️' },
       { to: '/profile', label: 'Profile', icon: '👤' },

@@ -121,6 +121,7 @@ const Search = () => {
                 <h3>{burial.full_name}</h3>
                 <p>{burial.cemetery_name} · {burial.barangay}, {burial.municipality}, {burial.province}</p>
                 <p>Record: MR-{String(burial.id).padStart(4, '0')} · Lot: {burial.plot_reference || 'Unassigned'}</p>
+                {burial.epitaph && <p><em>“{burial.epitaph}”</em></p>}
                 <div className="burial-result-actions">
                   <Link to={`/records/${burial.id}`} className="btn btn-outline">View Record</Link>
                   <Link

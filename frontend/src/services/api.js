@@ -65,6 +65,13 @@ export const reservationAPI = {
   reviewPlot: (id, action, note) => API.post(`/reservations/plots/${id}/review`, { action, note }),
 };
 
+export const submissionAPI = {
+  create: (data) => API.post('/submissions', data),
+  mine: () => API.get('/submissions/mine'),
+  all: () => API.get('/submissions/all'),
+  review: (id, action, note) => API.post(`/submissions/${id}/review`, { action, note }),
+};
+
 export const favoriteAPI = {
   getAll: () => API.get('/favorites'),
   add: (memorial_id) => API.post('/favorites/add', { memorial_id }),

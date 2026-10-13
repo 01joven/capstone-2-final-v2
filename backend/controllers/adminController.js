@@ -11,6 +11,9 @@ const validateRecord = (body = {}, role = 'staff') => {
   const graveReference = typeof body.grave_reference === 'string' ? body.grave_reference.trim() : '';
   const birthDate = body.birth_date || null;
   const deathDate = body.death_date || null;
+  const epitaph = typeof body.epitaph === 'string' && body.epitaph.trim()
+    ? body.epitaph.trim().slice(0, 500)
+    : null;
 
   if (!fullName || fullName.length > 200) {
     return { error: 'Full name must contain 1 to 200 characters.' };
@@ -21,6 +24,9 @@ const validateRecord = (body = {}, role = 'staff') => {
   const looksLikePlot = graveReference.match(/^([A-Za-z]{1,10})-?(\d+)$/);
   if (looksLikePlot && (looksLikePlot[2].length > 5 || Number(looksLikePlot[2]) > 10000)) {
     return { error: 'Plot numbers must be between 1 and 10000.' };
+  }
+  if (typeof body.epitaph === 'string' && body.epitaph.trim().length > 500) {
+    return { error: 'Epitaph must be 500 characters or fewer.' };
   }
   for (const [label, value] of [['Birth date', birthDate], ['Death date', deathDate]]) {
     if (value !== null && (
@@ -39,6 +45,7 @@ const validateRecord = (body = {}, role = 'staff') => {
       graveReference: graveReference || null,
       birthDate,
       deathDate,
+      epitaph,
     },
   };
 };
@@ -62,7 +69,7 @@ const getDashboard = async (req, res) => {
 const getRecords = async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT b.id, b.full_name, b.grave_reference, b.birth_date, b.death_date,
+      `SELECT b.id, b.full_name, b.grave_reference, b.birth_date, b.death_date, b.epitaph,
               c.name AS cemetery_name, c.barangay, c.municipality, c.province
        FROM burial_records b
        JOIN cemeteries c ON c.id = b.cemetery_id
@@ -87,7 +94,7 @@ const createRecord = async (req, res) => {
   let client;
   let transactionStarted = false;
   try {
-    const { fullName, graveReference, birthDate, deathDate } = validated.values;
+    const { fullName, graveReference, birthDate, deathDate, epitaph } = validated.values;
     client = await pool.connect();
     await client.query('BEGIN');
     transactionStarted = true;
@@ -121,10 +128,10 @@ const createRecord = async (req, res) => {
     }
 
     const result = await client.query(
-      `INSERT INTO burial_records (cemetery_id, full_name, grave_reference, birth_date, death_date)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, full_name, grave_reference, birth_date, death_date`,
-      [cemeteryId, fullName, graveReference, birthDate, deathDate]
+      `INSERT INTO burial_records (cemetery_id, full_name, grave_reference, birth_date, death_date, epitaph)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, full_name, grave_reference, birth_date, death_date, epitaph`,
+      [cemeteryId, fullName, graveReference, birthDate, deathDate, epitaph]
     );
     if (plot) {
       await client.query(
@@ -168,7 +175,7 @@ const updateRecord = async (req, res) => {
   let client;
   let transactionStarted = false;
   try {
-    const { fullName, graveReference, birthDate, deathDate } = validated.values;
+    const { fullName, graveReference, birthDate, deathDate, epitaph } = validated.values;
     client = await pool.connect();
     await client.query('BEGIN');
     transactionStarted = true;
@@ -203,10 +210,10 @@ const updateRecord = async (req, res) => {
     const result = await client.query(
       `UPDATE burial_records
        SET full_name = $1, grave_reference = $2, birth_date = $3,
-           death_date = $4
-       WHERE id = $5
-       RETURNING id, full_name, grave_reference, birth_date, death_date`,
-      [fullName, graveReference, birthDate, deathDate, recordId]
+           death_date = $4, epitaph = $5
+       WHERE id = $6
+       RETURNING id, full_name, grave_reference, birth_date, death_date, epitaph`,
+      [fullName, graveReference, birthDate, deathDate, epitaph, recordId]
     );
     if (plot) {
       await client.query(

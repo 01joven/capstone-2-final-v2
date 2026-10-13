@@ -70,6 +70,7 @@ const MemorialRecord = () => {
                 <div><dt>Plot / grave reference</dt><dd>{record.plot_reference || 'Unassigned'}</dd></div>
                 <div><dt>Date of death</dt><dd>{formatDate(record.death_date)}</dd></div>
               </dl>
+              {record.epitaph && <p><em>“{record.epitaph}”</em></p>}
               <Link to={`/map?burialId=${record.id}`} className="btn btn-primary">View on Map</Link>
             </article>
           </>

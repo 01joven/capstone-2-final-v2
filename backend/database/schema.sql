@@ -88,6 +88,29 @@ ALTER TABLE burial_records ALTER COLUMN is_demo SET DEFAULT FALSE;
 -- Demo data has been retired: every record is real data.
 ALTER TABLE burial_records DROP COLUMN IF EXISTS is_demo;
 
+-- Epitaph on burial records (optional memorial inscription, up to 500 chars).
+ALTER TABLE burial_records ADD COLUMN IF NOT EXISTS epitaph TEXT;
+
+-- Customer-submitted memorial information. Staff review publishes approved
+-- submissions as burial records; users see only their own submissions.
+CREATE TABLE IF NOT EXISTS burial_submissions (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  full_name VARCHAR(200) NOT NULL,
+  grave_reference VARCHAR(100),
+  birth_date DATE,
+  death_date DATE,
+  epitaph TEXT,
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',
+  review_note TEXT,
+  reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  reviewed_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CHECK (status IN ('pending', 'approved', 'rejected'))
+);
+CREATE INDEX IF NOT EXISTS burial_submissions_user_id_idx ON burial_submissions (user_id);
+CREATE INDEX IF NOT EXISTS burial_submissions_status_idx ON burial_submissions (status);
+
 CREATE TABLE IF NOT EXISTS reservations (
   id SERIAL PRIMARY KEY,
   user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,

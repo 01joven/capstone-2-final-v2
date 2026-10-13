@@ -82,7 +82,7 @@ const getBurialRecords = async (req, res) => {
     const whereClause = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
     // birth_date is not returned: it is personal data that the search does not need.
     const result = await pool.query(
-      `SELECT b.id, b.full_name, b.grave_reference, b.death_date,
+      `SELECT b.id, b.full_name, b.grave_reference, b.death_date, b.epitaph,
               c.name AS cemetery_name, c.barangay, c.municipality, c.province
        FROM burial_records b
        JOIN cemeteries c ON c.id = b.cemetery_id
