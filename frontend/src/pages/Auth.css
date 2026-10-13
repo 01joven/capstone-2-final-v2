@@ -1,0 +1,245 @@
+.auth-page {
+  position: relative;
+  display: grid;
+  min-height: 100vh;
+  align-items: center;
+  justify-items: center;
+  padding: 32px;
+  background:
+    linear-gradient(115deg, rgba(36, 27, 21, 0.77), rgba(48, 34, 25, 0.5)),
+    url('/cemetery-images/cogon-login-background.png') center 52% / cover fixed;
+}
+
+.auth-shell {
+  width: min(100%, 1240px);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 30px;
+  background: rgba(248, 243, 236, 0.96);
+  box-shadow: 0 32px 100px rgba(20, 14, 10, 0.32);
+}
+
+.auth-panel {
+  padding: 26px clamp(26px, 5vw, 64px) 54px;
+}
+
+.auth-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--primary);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.memorial-logo {
+  display: block;
+  width: 44px;
+  height: 44px;
+  color: var(--primary);
+  flex: 0 0 auto;
+}
+
+.auth-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.82fr);
+  align-items: center;
+  gap: clamp(40px, 8vw, 112px);
+  padding: 42px 0 10px;
+}
+
+.auth-intro {
+  max-width: 600px;
+}
+
+.auth-eyebrow {
+  margin-bottom: 18px;
+  color: var(--accent);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.auth-intro h1 {
+  margin-bottom: 18px;
+  color: var(--secondary);
+  font-size: clamp(2.5rem, 4.5vw, 4.4rem);
+  line-height: 1.08;
+}
+
+.auth-intro h2 {
+  margin-bottom: 18px;
+  color: var(--primary);
+  font-size: clamp(1.15rem, 2vw, 1.55rem);
+  line-height: 1.45;
+}
+
+.auth-intro > p:not(.auth-eyebrow) {
+  max-width: 560px;
+  color: var(--text-muted);
+  font-size: 1rem;
+  line-height: 1.9;
+}
+
+.auth-divider {
+  width: 72px;
+  height: 3px;
+  margin: 30px 0 20px;
+  border-radius: 99px;
+  background: var(--accent);
+}
+
+.auth-verse {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.auth-verse span {
+  color: var(--accent);
+  font-size: 1.4rem;
+}
+
+.auth-form-wrap {
+  width: 100%;
+}
+
+.auth-card {
+  width: 100%;
+  padding: clamp(26px, 4vw, 42px);
+  border: 1px solid rgba(106, 71, 48, 0.1);
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: 0 18px 54px rgba(49, 38, 29, 0.13);
+}
+
+.auth-card h2 {
+  color: var(--secondary);
+  margin-bottom: 8px;
+  font-size: clamp(1.65rem, 2.5vw, 2rem);
+  line-height: 1.25;
+}
+
+.auth-subtitle {
+  color: var(--text-muted);
+  margin-bottom: 28px;
+  font-size: 0.93rem;
+  line-height: 1.65;
+}
+
+.auth-card .form-group {
+  margin-bottom: 18px;
+}
+
+.auth-card .form-group label {
+  margin-bottom: 8px;
+}
+
+.auth-card input:-webkit-autofill,
+.auth-card input:-webkit-autofill:hover,
+.auth-card input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px #fff inset;
+  -webkit-text-fill-color: var(--text);
+  transition: background-color 9999s ease-in-out 0s;
+}
+
+.auth-btn {
+  width: 100%;
+  padding: 14px;
+  margin-top: 8px;
+}
+
+.auth-switch {
+  margin-top: 22px;
+  color: var(--text-muted);
+  text-align: center;
+  font-size: 0.92rem;
+}
+
+.auth-switch a {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.auth-admin-link {
+  display: flex;
+  width: 100%;
+  margin-top: 14px;
+}
+
+.admin-email-code-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.admin-email-code-row input {
+  min-width: 0;
+  flex: 1;
+}
+
+.admin-email-code-row .btn {
+  flex: 0 0 auto;
+  padding: 10px 14px;
+  font-size: 0.85rem;
+}
+
+.auth-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+@media (max-width: 900px) {
+  .auth-page {
+    padding: 22px;
+    background-attachment: scroll;
+  }
+
+  .auth-content {
+    grid-template-columns: 1fr;
+    gap: 28px;
+    max-width: 680px;
+  }
+
+  .auth-intro h1 {
+    font-size: clamp(2rem, 5vw, 3.2rem);
+  }
+}
+
+@media (max-width: 700px) {
+  .auth-page {
+    align-items: start;
+    padding: 14px;
+  }
+
+  .auth-shell {
+    border-radius: 22px;
+  }
+
+  .auth-panel {
+    padding: 20px 18px 24px;
+  }
+
+  .auth-content {
+    grid-template-columns: 1fr;
+    gap: 26px;
+    padding-top: 32px;
+  }
+
+  .auth-intro h1 {
+    font-size: clamp(2.1rem, 10vw, 3.1rem);
+  }
+
+  .auth-intro > p:not(.auth-eyebrow) {
+    font-size: 0.94rem;
+    line-height: 1.75;
+  }
+
+  .auth-divider,
+  .auth-verse {
+    display: none;
+  }
+}

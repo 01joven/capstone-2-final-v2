@@ -1,0 +1,276 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --bg: #f6f0e9;
+  --surface: #ffffff;
+  --surface-soft: #faf4ee;
+  --primary: #6a4730;
+  --accent: #b98a5a;
+  --accent-soft: #efdfc9;
+  --secondary: #42372d;
+  --text: #312a24;
+  --text-muted: #766a5f;
+  --border: #e3d6c6;
+  --danger: #c84b31;
+  --success: #2d8f5a;
+  --shadow: 0 24px 80px rgba(49, 38, 29, 0.08);
+}
+
+html {
+  font-size: 16px;
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* The page itself must never scroll sideways. Individual areas that need it
+   (admin tables, the mobile nav strip) handle their own scrolling. */
+html,
+body {
+  overflow-x: clip;
+}
+
+@supports not (overflow: clip) {
+  html,
+  body {
+    overflow-x: hidden;
+  }
+}
+
+/* Grid/flex children default to min-width: auto, which lets one long word
+   (email, GCash reference, receipt number) force its card wider than the
+   screen. These guards let the column shrink instead. */
+.payment-item > div,
+.payment-review-item > div,
+.reservation-item-body,
+.map-sidebar-item,
+.burial-result,
+.admin-panel,
+.memorial-information {
+  min-width: 0;
+}
+
+/* Long unbroken text wraps instead of pushing the page sideways. */
+.admin-table th,
+.admin-table td,
+.payment-item p,
+.payment-review-item p,
+.reservation-item p,
+.burial-result p,
+.map-sidebar-item p,
+.memorial-information p,
+.success-msg,
+.error-msg {
+  overflow-wrap: break-word;
+}
+
+body {
+  font-family: 'Poppins', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: linear-gradient(180deg, #f9f5ef 0%, #efe2d3 100%);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+ul {
+  list-style: none;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 24px;
+  border-radius: 16px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: white;
+}
+
+.btn-primary:hover {
+  background: #593c2d;
+}
+
+.btn-outline {
+  background: transparent;
+  color: var(--primary);
+  border: 1.5px solid rgba(106, 71, 48, 0.16);
+}
+
+.btn-outline:hover {
+  background: rgba(106, 71, 48, 0.08);
+}
+
+.btn-accent {
+  background: var(--accent);
+  color: white;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px 16px;
+  background: var(--surface-soft);
+  color: var(--text);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: rgba(185, 138, 90, 0.35);
+  box-shadow: 0 0 0 8px rgba(185, 138, 90, 0.12);
+}
+
+.form-group {
+  margin-bottom: 18px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--secondary);
+}
+
+.error-msg {
+  color: var(--danger);
+  font-size: 0.95rem;
+  margin-top: 12px;
+}
+
+.success-msg {
+  color: var(--success);
+  font-size: 0.95rem;
+  margin-top: 12px;
+}
+
+.page-container {
+  padding: 32px 28px 48px;
+  max-width: 1240px;
+  margin: 0 auto;
+}
+
+.page-title {
+  font-size: clamp(2rem, 3vw, 2.5rem);
+  color: var(--secondary);
+  margin-bottom: 24px;
+}
+
+.section-title {
+  font-size: 1.3rem;
+  color: var(--secondary);
+  margin-bottom: 18px;
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  background: rgba(185, 138, 90, 0.12);
+  color: var(--secondary);
+}
+
+.badge-pending {
+  background: #fff4dc;
+  color: #7a590f;
+}
+
+.badge-confirmed {
+  background: #d6f1e0;
+  color: #1f6f45;
+}
+
+.badge-completed {
+  background: #dbe9ff;
+  color: #1f4e7a;
+}
+
+.badge-pending_verification {
+  background: #fff4dc;
+  color: #7a590f;
+}
+
+.badge-rejected {
+  background: #fce1dd;
+  color: #963c2d;
+}
+
+@media (max-width: 1024px) {
+  .page-container {
+    padding: 28px 22px 40px;
+  }
+}
+
+@media (max-width: 768px) {
+  .page-title {
+    font-size: 1.9rem;
+  }
+
+  .grid-3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .page-container {
+    padding: 20px 14px 36px;
+  }
+
+  .btn {
+    padding: 12px 18px;
+  }
+
+  .card {
+    border-radius: 18px;
+  }
+}
