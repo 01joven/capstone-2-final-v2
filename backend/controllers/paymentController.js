@@ -144,7 +144,7 @@ const createPayment = async (req, res) => {
         `UPDATE payments
          SET payment_method = 'GCash', payment_reference = $1,
              payment_status = 'pending_verification', transaction_date = CURRENT_TIMESTAMP,
-             verified_by = NULL, verified_at = NULL
+             verified_by = NULL, verified_at = NULL, admin_note = NULL
          WHERE id = $2
          RETURNING *`,
         [paymentReference, existingPayment.id]
@@ -234,10 +234,17 @@ const verifyPayment = async (req, res) => {
       [paymentStatus, req.user.id, note || null, paymentId]
     );
     if (action === 'approve') {
-      await client.query(
-        "UPDATE reservations SET status = 'confirmed' WHERE id = $1",
+      // Conditional update: a concurrent cancellation commits first, this
+      // affects zero rows instead of resurrecting the reservation.
+      const confirmed = await client.query(
+        "UPDATE reservations SET status = 'confirmed' WHERE id = $1 AND status = 'pending'",
         [payment.reservation_id]
       );
+      if (confirmed.rowCount === 0) {
+        await client.query('ROLLBACK');
+        transactionStarted = false;
+        return res.status(409).json({ message: 'The reservation is no longer pending.' });
+      }
     }
 
     let receipt = null;

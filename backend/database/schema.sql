@@ -155,9 +155,14 @@ ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_method VARCHAR(30) DEFAULT
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_reference VARCHAR(64);
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS verified_by INTEGER REFERENCES users(id) ON DELETE SET NULL;
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS verified_at TIMESTAMP;
-CREATE UNIQUE INDEX IF NOT EXISTS payments_payment_reference_unique
+-- References stay unique while a payment is live (awaiting or completed) but
+-- are reusable after rejection, so one failed attempt never burns a
+-- reference number for everyone.
+DROP INDEX IF EXISTS payments_payment_reference_unique;
+CREATE UNIQUE INDEX IF NOT EXISTS payments_payment_reference_active_unique
   ON payments (LOWER(payment_reference))
-  WHERE payment_reference IS NOT NULL;
+  WHERE payment_reference IS NOT NULL
+    AND payment_status IN ('pending_verification', 'completed');
 
 -- Official receipts are issued automatically when a payment is approved.
 -- One receipt per payment; receipt numbers are deterministic (OR-YYYY-000000)

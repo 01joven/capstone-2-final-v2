@@ -139,7 +139,7 @@ const ReservationsList = () => {
   }, []);
 
   const cancelEntry = async (reservation) => {
-    if (!window.confirm('Cancel this reservation?')) return;
+    if (!window.confirm('Cancel this reservation? Any awaiting payment claim will be voided. GCash money already sent is not refunded automatically — contact staff about returns.')) return;
     setCancellingId(reservation.id);
     setError('');
     setMessage('');

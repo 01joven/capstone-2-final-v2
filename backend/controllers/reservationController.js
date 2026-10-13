@@ -232,7 +232,16 @@ const reviewPlotReservation = async (req, res) => {
     }
 
     const status = action === 'approve' ? 'confirmed' : 'rejected';
-    await client.query('UPDATE reservations SET status = $1, review_note = $2 WHERE id = $3', [status, note || null, reservationId]);
+    // Conditional update: never overwrite a concurrent cancellation.
+    const updated = await client.query(
+      'UPDATE reservations SET status = $1, review_note = $2 WHERE id = $3 AND status = $4',
+      [status, note || null, reservationId, 'pending']
+    );
+    if (updated.rowCount === 0) {
+      await client.query('ROLLBACK');
+      transactionStarted = false;
+      return res.status(409).json({ message: 'The reservation is no longer pending.' });
+    }
     const notified = await client.query(
       `SELECT r.visitor_name, u.email, u.name
        FROM reservations r JOIN users u ON u.id = r.user_id WHERE r.id = $1`,
@@ -276,23 +285,60 @@ const cancelReservation = async (req, res) => {
     return res.status(400).json({ message: 'A valid reservation ID is required.' });
   }
   const isPrivileged = req.user.role === 'staff' || req.user.role === 'admin';
+  let client;
+  let transactionStarted = false;
   try {
-    const result = await pool.query('SELECT * FROM reservations WHERE id = $1', [reservationId]);
+    client = await pool.connect();
+    await client.query('BEGIN');
+    transactionStarted = true;
+
+    const result = await client.query('SELECT * FROM reservations WHERE id = $1 FOR UPDATE', [reservationId]);
     const reservation = result.rows[0];
     if (!reservation) {
+      await client.query('ROLLBACK');
+      transactionStarted = false;
       return res.status(404).json({ message: 'Reservation not found.' });
     }
     if (Number(reservation.user_id) !== Number(req.user.id) && !isPrivileged) {
+      await client.query('ROLLBACK');
+      transactionStarted = false;
       return res.status(403).json({ message: 'Access denied.' });
     }
     if (reservation.status !== 'pending') {
+      await client.query('ROLLBACK');
+      transactionStarted = false;
       return res.status(409).json({ message: 'Only pending reservations can be cancelled.' });
     }
-    await pool.query("UPDATE reservations SET status = 'cancelled' WHERE id = $1", [reservationId]);
-    res.json({ message: 'Reservation cancelled.', status: 'cancelled' });
+    await client.query("UPDATE reservations SET status = 'cancelled' WHERE id = $1", [reservationId]);
+    // Void any awaiting payment claim so it cannot linger in the verify queue
+    // or be approved afterward. Completed payments are untouched (no refunds:
+    // money already verified stays verified; contact staff about returns).
+    const voided = await client.query(
+      `UPDATE payments
+       SET payment_status = 'rejected',
+           admin_note = 'Voided: reservation cancelled before verification.'
+       WHERE reservation_id = $1 AND payment_status = 'pending_verification'
+       RETURNING id`,
+      [reservationId]
+    );
+    await client.query('COMMIT');
+    transactionStarted = false;
+    res.json({
+      message: voided.rows.length > 0
+        ? 'Reservation cancelled. The awaiting payment claim was voided; no automatic refund is issued.'
+        : 'Reservation cancelled.',
+      status: 'cancelled',
+    });
   } catch (error) {
+    if (transactionStarted) {
+      await client.query('ROLLBACK').catch((rollbackError) => {
+        console.error('Cancel reservation rollback error:', rollbackError);
+      });
+    }
     console.error('Cancel reservation error:', error);
     res.status(500).json({ message: 'Unable to cancel reservation.' });
+  } finally {
+    if (client) client.release();
   }
 };
 
