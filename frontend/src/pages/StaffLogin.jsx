@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import AuthLayout from '../components/AuthLayout';
+import PasswordInput from '../components/PasswordInput';
 import './Auth.css';
 
 const StaffLogin = () => {
@@ -35,10 +36,12 @@ const StaffLogin = () => {
           <label htmlFor="staff-login-email">Email</label>
           <input id="staff-login-email" type="email" autoComplete="off" value={email} onChange={(event) => setEmail(event.target.value)} required />
         </div>
-        <div className="form-group">
-          <label htmlFor="staff-login-password">Password</label>
-          <input id="staff-login-password" type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} required />
-        </div>
+        <PasswordInput
+          id="staff-login-password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          required
+        />
         <p className="auth-switch admin-forgot-link">
           <Link to="/staff/recovery">Forgot password?</Link>
         </p>

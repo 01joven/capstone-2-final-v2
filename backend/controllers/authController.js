@@ -5,7 +5,7 @@ const pool = require('../config/db');
 const { sendEmail } = require('../services/emailService');
 
 const PASSWORD_RESET_MESSAGE = 'If an account exists for that email, a password reset code will be sent.';
-const RESET_ROLES = ['user', 'staff']; // Administrator credential recovery is operator-only (see README).
+const RESET_ROLES = ['user', 'staff', 'admin'];
 const RESET_REQUESTS_PER_HOUR = 5;
 const RESET_FAILED_ATTEMPTS_PER_HOUR = 10;
 const MAX_PASSWORD_BYTES = 72;
@@ -271,7 +271,7 @@ const resetPassword = async (req, res) => {
     transactionStarted = true;
 
     const accountResult = await client.query(
-      `SELECT id FROM users
+      `SELECT id, role FROM users
        WHERE LOWER(email) = $1 AND role = ANY($2)
        FOR UPDATE`,
       [email, RESET_ROLES]
@@ -281,6 +281,11 @@ const resetPassword = async (req, res) => {
       await client.query('ROLLBACK');
       transactionStarted = false;
       return res.status(400).json({ message: INVALID_CODE_MESSAGE });
+    }
+    if (account.role === 'admin' && newPassword.length < 12) {
+      await client.query('ROLLBACK');
+      transactionStarted = false;
+      return res.status(400).json({ message: 'Administrator passwords must contain at least 12 characters.' });
     }
 
     // Per-account cap across all codes in the last hour, so requesting new codes cannot reset the guess budget.

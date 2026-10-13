@@ -88,15 +88,7 @@ const PasswordRecovery = ({ audience = 'user' }) => {
       promptTitle="Secure Account Recovery"
       promptDescription={`A single-use code expires after 10 minutes. You can request at most 5 codes per hour, and each code allows 5 attempts. If you cannot access your registered email, contact the system operator.${audience === 'admin' ? ' Administrator passwords must contain at least 12 characters.' : ''}`}
     >
-      {audience === 'admin' ? (
-        <section>
-          <h2>Administrator recovery</h2>
-          <p className="auth-subtitle">
-            Administrator passwords are reset by the system operator after identity is verified. Self-service email reset is not available for administrator accounts.
-          </p>
-          <Link to={details.login} className="btn btn-primary auth-btn">Return to Admin Sign In</Link>
-        </section>
-      ) : completed ? (
+      {completed ? (
         <section>
           <h2>Password updated</h2>
           <p className="auth-feedback" role="status">{message}</p>

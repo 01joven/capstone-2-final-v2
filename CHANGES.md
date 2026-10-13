@@ -1,5 +1,8 @@
 # Security and correctness fixes
 
+## Policy change
+- Administrator self-service email reset is now enabled (`/admin/recovery` works like staff/user, 12-character minimum enforced server-side). The operator CLI reset remains as fallback. Demo-data system removed: `is_demo` columns dropped, purge-demo endpoint/CLI deleted, all records are real data.
+
 ## Critical
 - Removed the hardcoded default admin password (`password123`) from the seed script, scripts, and README. Seeding now needs `ADMIN_SEED_PASSWORD` (12+ chars).
 - Deleted dev scripts that created admins with a known password or wiped the data directory: `create_admin.js`, `reset_and_create.js`, `recreate_admin.js`, `test_login.js`, `debug.js`, `list_users.js`, `test_users_page.js`.
