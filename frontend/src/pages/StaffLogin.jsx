@@ -19,7 +19,15 @@ const StaffLogin = () => {
       await loginStaff(email, password);
       navigate('/staff/dashboard');
     } catch (loginError) {
-      setError(loginError.response?.data?.message || 'Staff login failed.');
+      if (!loginError.response) {
+        if (loginError.code === 'ECONNABORTED') {
+          setError('Server connection timed out. The backend server may be waking up, please try again.');
+        } else {
+          setError('Cannot connect to the backend server. Please verify your backend deployment or API URL.');
+        }
+      } else {
+        setError(loginError.response.data?.message || 'Staff login failed. Please check your credentials.');
+      }
     }
   };
 
