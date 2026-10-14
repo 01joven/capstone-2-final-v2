@@ -28,8 +28,19 @@ const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000,http:
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
+
+const isOriginAllowed = (origin) => {
+  if (!origin) return true;
+  if (allowedOrigins.includes(origin)) return true;
+  if (/^https:\/\/([a-z0-9-_]+\.)?vercel\.app$/i.test(origin)) return true;
+  return false;
+};
+
 app.use(cors({
-  origin: (origin, callback) => callback(null, !origin || allowedOrigins.includes(origin)),
+  origin: (origin, callback) => {
+    callback(null, isOriginAllowed(origin));
+  },
+  credentials: true,
 }));
 
 app.use((req, res, next) => {
