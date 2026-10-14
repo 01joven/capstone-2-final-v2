@@ -17,15 +17,9 @@ const recoveryDetails = {
     passwordMinLength: 8,
     description: 'Reset your staff password using a code sent to your registered email.',
   },
-  user: {
-    title: 'Password Recovery',
-    login: '/login',
-    passwordMinLength: 8,
-    description: 'Reset your account password using a code sent to your registered email.',
-  },
 };
 
-const PasswordRecovery = ({ audience = 'user' }) => {
+const PasswordRecovery = ({ audience = 'staff' }) => {
   const details = recoveryDetails[audience];
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');

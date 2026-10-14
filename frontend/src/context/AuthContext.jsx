@@ -14,7 +14,7 @@ const parseStoredUser = () => {
     const raw = localStorage.getItem('user');
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed.id !== 'number' || typeof parsed.role !== 'string') {
+    if (!parsed || typeof parsed.id !== 'number' || !['staff', 'admin'].includes(parsed.role)) {
       localStorage.removeItem('user');
       localStorage.removeItem('token');
       return null;

@@ -6,112 +6,111 @@ import { paymentAPI, reservationAPI } from '../services/api';
 import usePolling from '../hooks/usePolling';
 import './Payments.css';
 
-const formatDate = (date) => new Date(date).toLocaleDateString();
+const formatDate = (date) => {
+  if (!date) return '—';
+  const parsed = new Date(`${String(date).slice(0, 10)}T00:00:00`);
+  return Number.isNaN(parsed.getTime()) ? '—' : parsed.toLocaleDateString();
+};
 
 const Payments = () => {
   const { user } = useAuth();
   const [payments, setPayments] = useState([]);
-  const [pendingReservation, setPendingReservation] = useState(null);
-  const [paymentReference, setPaymentReference] = useState('');
-  const [pendingVerifications, setPendingVerifications] = useState([]);
+  const [unpaidReservations, setUnpaidReservations] = useState([]);
   const [searchParams] = useSearchParams();
   const [error, setError] = useState('');
-  const [adminError, setAdminError] = useState('');
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [reviewingPaymentId, setReviewingPaymentId] = useState(null);
-  const [reviewNote, setReviewNote] = useState('');
+  const [activePayingId, setActivePayingId] = useState(null);
+  const [cashAmount, setCashAmount] = useState('');
+  const [cashNote, setCashNote] = useState('');
+  const [isRecording, setIsRecording] = useState(false);
   const [receipt, setReceipt] = useState(null);
   const [receiptLoadingId, setReceiptLoadingId] = useState(null);
   const [receiptError, setReceiptError] = useState('');
 
-  const loadPayments = useCallback(async () => {
-    const [paymentResponse, reservationResponse] = await Promise.all([
-      paymentAPI.getAll(),
-      reservationAPI.getUserReservations(),
-    ]);
-    setPayments(paymentResponse.data);
-
-    const reservationId = Number(searchParams.get('reservation'));
-    const foundReservation = reservationId > 0
-      ? reservationResponse.data.find((reservation) => reservation.id === reservationId)
-      : null;
-    setPendingReservation(foundReservation || null);
-  }, [searchParams]);
-
-  const canReviewPayments = user?.is_admin || user?.is_staff;
-
-  const loadPendingVerifications = useCallback(async () => {
-    if (!canReviewPayments) return;
-    setAdminError('');
+  const loadData = useCallback(async () => {
     try {
-      const { data } = await paymentAPI.getPendingVerifications();
-      setPendingVerifications(data);
-    } catch (loadError) {
-      setAdminError(loadError.response?.data?.message || 'Could not load payments awaiting verification.');
-    }
-  }, [canReviewPayments]);
+      const [paymentResponse, reservationResponse] = await Promise.all([
+        paymentAPI.getAll(),
+        reservationAPI.getUserReservations(),
+      ]);
+      setPayments(paymentResponse.data || []);
 
-  const refreshPaymentData = useCallback(async () => {
-    try {
-      await Promise.all([loadPayments(), loadPendingVerifications()]);
-    } catch (refreshError) {
-      setError(refreshError.response?.data?.message || 'Could not refresh payment status.');
-    }
-  }, [loadPayments, loadPendingVerifications]);
+      const allReservations = reservationResponse.data || [];
+      const pending = allReservations.filter(
+        (r) => r.status === 'pending' && (!r.payment_status || r.payment_status !== 'completed')
+      );
+      setUnpaidReservations(pending);
 
-  usePolling(refreshPaymentData);
+      const requestedReservationId = Number(searchParams.get('reservation'));
+      if (requestedReservationId > 0 && !activePayingId) {
+        const found = pending.find((r) => r.id === requestedReservationId);
+        if (found) {
+          setActivePayingId(found.id);
+          setCashAmount(String(found.total_price || ''));
+        }
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Could not load payment records.');
+    }
+  }, [searchParams, activePayingId]);
+
+  usePolling(loadData);
 
   useEffect(() => {
-    const loadPage = async () => {
+    const init = async () => {
       setIsLoading(true);
       setError('');
       try {
-        await loadPayments();
-        await loadPendingVerifications();
-      } catch (loadError) {
-        setError(loadError.response?.data?.message || 'Could not load payment history.');
+        await loadData();
       } finally {
         setIsLoading(false);
       }
     };
+    init();
+  }, [loadData]);
 
-    loadPage();
-  }, [loadPayments, loadPendingVerifications]);
-
-  const handleSubmitPayment = async (event) => {
-    event.preventDefault();
-    if (!pendingReservation) return;
+  const handleStartPayment = (reservation) => {
+    setActivePayingId(reservation.id);
+    setCashAmount(String(reservation.total_price || ''));
+    setCashNote(`Walk-in cash payment for ${reservation.deceased_name ? `${reservation.deceased_name} plot` : 'burial plot'}`);
     setError('');
     setMessage('');
-    setIsSubmitting(true);
-    try {
-      await paymentAPI.create(pendingReservation.id, paymentReference);
-      setPendingReservation({ ...pendingReservation, payment_status: 'pending_verification' });
-      setPaymentReference('');
-      setMessage('Payment reference submitted. Your reservation will be confirmed after an administrator verifies the GCash payment.');
-      await loadPayments();
-    } catch (submitError) {
-      setError(submitError.response?.data?.message || 'Could not submit the payment reference. Please try again.');
-    } finally {
-      setIsSubmitting(false);
-    }
   };
 
-  const handleReview = async (paymentId, action) => {
-    setAdminError('');
+  const handleCancelPayment = () => {
+    setActivePayingId(null);
+    setCashAmount('');
+    setCashNote('');
+  };
+
+  const handleConfirmCashPayment = async (reservationId) => {
+    if (!cashAmount || Number(cashAmount) < 0) {
+      setError('Enter a valid payment amount.');
+      return;
+    }
+    setError('');
     setMessage('');
-    setReviewingPaymentId(paymentId);
+    setIsRecording(true);
     try {
-      const { data } = await paymentAPI.verify(paymentId, action, reviewNote || undefined);
-      setMessage(data.receipt_no ? `${data.message} Receipt: ${data.receipt_no}.` : data.message);
-      setReviewNote('');
-      await Promise.all([loadPayments(), loadPendingVerifications()]);
-    } catch (reviewError) {
-      setAdminError(reviewError.response?.data?.message || 'Could not update this payment.');
+      const { data } = await paymentAPI.recordCash({
+        reservation_id: reservationId,
+        amount: Number(cashAmount),
+        note: cashNote || 'Walk-in cash payment received at office',
+      });
+      setMessage(`Cash payment recorded successfully! Official Receipt: ${data.receipt_no}.`);
+      setActivePayingId(null);
+      setCashAmount('');
+      setCashNote('');
+
+      if (data.receipt_id || data.payment?.id) {
+        await handleViewReceipt(data.payment?.id || data.receipt_id);
+      }
+      await loadData();
+    } catch (submitError) {
+      setError(submitError.response?.data?.message || 'Could not record cash payment.');
     } finally {
-      setReviewingPaymentId(null);
+      setIsRecording(false);
     }
   };
 
@@ -129,190 +128,245 @@ const Payments = () => {
     }
   };
 
-  const canSubmitReference = pendingReservation &&
-    (!pendingReservation.payment_status || pendingReservation.payment_status === 'rejected');
-
   return (
     <Layout>
       <div className="page-container">
-        <h1 className="page-title">Payments</h1>
+        <div className="admin-heading-row">
+          <h1 className="page-title">Payments</h1>
+          <span className="badge badge-cash">Cash / Walk-in Only</span>
+        </div>
+
+        <div className="cash-policy-banner card">
+          <div className="cash-policy-icon">💵</div>
+          <div>
+            <h3>Walk-in &amp; Cash Payment Policy</h3>
+            <p>
+              All plot reservations for the deceased are paid via <strong>Cash (Walk-in)</strong> at the cemetery office.
+              Walk-in visitors can locate deceased loved ones on the cemetery map and visit their burial spots anytime without appointment fees.
+            </p>
+          </div>
+        </div>
 
         {error && <p className="error-msg" role="alert">{error}</p>}
         {message && <p className="success-msg" role="status">{message}</p>}
 
-        {pendingReservation && (
-          <section className="payment-checkout card" aria-labelledby="checkout-title">
-            <h2 id="checkout-title">GCash Reservation Payment</h2>
-            <p>Memorial: <strong>{pendingReservation.memorial_name}</strong></p>
-            <p>Reservation ID: <strong>RES-{String(pendingReservation.id).padStart(4, '0')}</strong></p>
-            <p>Date: {formatDate(pendingReservation.reservation_date)}</p>
-            <p className="payment-amount">
-              Amount to pay: ₱{parseFloat(pendingReservation.total_price).toLocaleString()}
+        {/* Pending Walk-in Reservations Section */}
+        <section className="cash-payments-section card" aria-labelledby="pending-cash-title">
+          <h2 id="pending-cash-title" className="section-title">
+            Pending Plot Reservations (Awaiting Cash Payment)
+          </h2>
+          <p className="admin-provenance-note">
+            When a family member or representative walks in to pay for a plot reservation, verify the deceased person and plot spot, then record the cash payment to issue an official receipt and confirm the reservation.
+          </p>
+
+          {unpaidReservations.length === 0 ? (
+            <p className="payment-empty">
+              {isLoading ? 'Checking pending reservations...' : 'No pending reservations are currently waiting for payment.'}
             </p>
+          ) : (
+            <div className="unpaid-reservations-list">
+              {unpaidReservations.map((reservation) => {
+                const isPlot = reservation.reservation_type === 'plot' || Boolean(reservation.plot_section);
+                const isPayingThis = activePayingId === reservation.id;
 
-            {pendingReservation.payment_status === 'pending_verification' ? (
-              <div className="payment-waiting" role="status">
-                <strong>Waiting for payment verification</strong>
-                <p>Your reservation is still pending. An administrator will confirm it after checking the GCash transaction.</p>
-              </div>
-            ) : pendingReservation.payment_status === 'completed' ? (
-              <div className="payment-verified" role="status">
-                <strong>Payment verified — reservation confirmed</strong>
-              </div>
-            ) : (
-              <>
-                {pendingReservation.payment_status === 'rejected' && (
-                  <p className="error-msg">The previous payment reference could not be verified. Check the reference and submit it again.</p>
-                )}
-                <div className="gcash-instructions">
-                  <h3>Pay with GCash</h3>
-                  <ol>
-                    <li>Open and log in to the GCash app on your phone.</li>
-                    <li>Choose Scan QR and scan this InstaPay QR code.</li>
-                    <li>Enter the exact amount shown above and complete the payment.</li>
-                    <li>Copy the transaction reference from your GCash receipt.</li>
-                  </ol>
-                  <img
-                    className="gcash-qr"
-                    src="/gcash-qr.png"
-                    alt="GCash and InstaPay payment QR code"
-                  />
-                  <p className="qr-payment-note">
-                    This is a static InstaPay QR, not a live GCash checkout. The app cannot detect a scan or payment automatically.
-                  </p>
-                </div>
-                {canSubmitReference && (
-                  <form className="payment-reference-form" onSubmit={handleSubmitPayment}>
-                    <label htmlFor="gcash-reference">GCash transaction reference number</label>
-                    <input
-                      id="gcash-reference"
-                      type="text"
-                      autoComplete="off"
-                      minLength={6}
-                      maxLength={30}
-                      pattern="[A-Za-z0-9-]{6,30}"
-                      title="Use 6 to 30 letters, numbers, or hyphens."
-                      placeholder="Enter the reference from your GCash receipt"
-                      value={paymentReference}
-                      onChange={(event) => setPaymentReference(event.target.value)}
-                      required
-                    />
-                    <button className="btn btn-primary" type="submit" disabled={isSubmitting}>
-                      {isSubmitting ? 'Submitting...' : 'Submit for Verification'}
-                    </button>
-                    <p>Do not submit until the transfer is complete. The reservation stays pending until a staff member verifies it.</p>
-                  </form>
-                )}
-              </>
-            )}
-          </section>
-        )}
-
-        {canReviewPayments && (
-          <section className="admin-payment-review" aria-labelledby="payment-review-title">
-            <h2 id="payment-review-title" className="section-title">Payment Verification Queue</h2>
-            {adminError && <p className="error-msg" role="alert">{adminError}</p>}
-            <div className="payment-reference-form">
-              <label htmlFor="review-note">Note for customer (optional, sent on approve/reject)</label>
-              <input
-                id="review-note"
-                type="text"
-                maxLength={500}
-                placeholder="e.g. Reference confirmed in GCash history"
-                value={reviewNote}
-                onChange={(event) => setReviewNote(event.target.value)}
-              />
-            </div>
-            {pendingVerifications.length === 0 ? (
-              <p className="payment-empty">{isLoading ? 'Loading verification queue...' : 'No payments are waiting for verification.'}</p>
-            ) : (
-              <div className="payments-list">
-                {pendingVerifications.map((payment) => (
-                  <article className="payment-review-item card" key={payment.payment_id}>
-                    <div>
-                      <h3>{payment.memorial_name}</h3>
-                      <p>Visitor: {payment.visitor_name} · Account: {payment.account_email}</p>
-                      <p>Reservation: RES-{String(payment.reservation_id).padStart(4, '0')} · {formatDate(payment.reservation_date)}</p>
-                      <p>GCash reference: <strong>{payment.payment_reference}</strong></p>
-                      <p>Submitted: {formatDate(payment.transaction_date)}</p>
+                return (
+                  <article key={reservation.id} className={`unpaid-reservation-card ${isPayingThis ? 'active-paying' : ''}`}>
+                    <div className="unpaid-info">
+                      <div className="unpaid-header">
+                        <span className="record-id">RES-{String(reservation.id).padStart(4, '0')}</span>
+                        <span className="badge badge-pending">Awaiting Cash</span>
+                      </div>
+                      <h3>
+                        {isPlot
+                          ? `Section ${reservation.plot_section}, Plot ${String(reservation.plot_number).padStart(2, '0')}`
+                          : reservation.memorial_name}
+                      </h3>
+                      {reservation.deceased_name && (
+                        <p className="deceased-highlight">
+                          Deceased: <strong>{reservation.deceased_name}</strong>
+                        </p>
+                      )}
+                      <p>Family / Contact: <strong>{reservation.visitor_name}</strong> ({reservation.contact})</p>
+                      <p>Reservation Date: {formatDate(reservation.reservation_date)}</p>
+                      <p className="payment-amount">
+                        Amount Due: ₱{Number(reservation.total_price || 0).toLocaleString()}
+                      </p>
                     </div>
-                    <div className="payment-review-actions">
-                      <strong>₱{parseFloat(payment.amount).toLocaleString()}</strong>
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        disabled={reviewingPaymentId === payment.payment_id}
-                        onClick={() => handleReview(payment.payment_id, 'approve')}
-                      >
-                        Approve &amp; Confirm
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-outline"
-                        disabled={reviewingPaymentId === payment.payment_id}
-                        onClick={() => handleReview(payment.payment_id, 'reject')}
-                      >
-                        Reject
-                      </button>
+
+                    <div className="unpaid-actions">
+                      {!isPayingThis ? (
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          onClick={() => handleStartPayment(reservation)}
+                        >
+                          Record Cash Payment
+                        </button>
+                      ) : (
+                        <div className="record-cash-form">
+                          <h4>Record Cash Payment</h4>
+                          <label>
+                            Cash Amount Received (₱):
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              required
+                              value={cashAmount}
+                              onChange={(e) => setCashAmount(e.target.value)}
+                              placeholder="0.00"
+                            />
+                          </label>
+                          <label>
+                            Receipt Note (Optional):
+                            <input
+                              type="text"
+                              maxLength={250}
+                              value={cashNote}
+                              onChange={(e) => setCashNote(e.target.value)}
+                              placeholder="e.g. Paid in cash at cemetery office counter"
+                            />
+                          </label>
+                          <div className="admin-form-actions">
+                            <button
+                              type="button"
+                              className="btn btn-primary"
+                              disabled={isRecording}
+                              onClick={() => handleConfirmCashPayment(reservation.id)}
+                            >
+                              {isRecording ? 'Issuing Receipt...' : 'Confirm Cash & Issue Receipt'}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-outline"
+                              onClick={handleCancelPayment}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </article>
-                ))}
-              </div>
-            )}
-          </section>
-        )}
+                );
+              })}
+            </div>
+          )}
+        </section>
 
-        <h2 className="section-title">Payment History</h2>
+        {/* Printable Official Receipt Modal / Card */}
         {receiptError && <p className="error-msg" role="alert">{receiptError}</p>}
         {receipt && (
-          <section className="payment-checkout card" aria-labelledby="receipt-title" aria-live="polite">
-            <h2 id="receipt-title">Official Receipt · {receipt.receipt_no}</h2>
-            <p>Memorial: <strong>{receipt.memorial_name || '—'}</strong></p>
-            <p>Visitor: <strong>{receipt.visitor_name}</strong> · Account: {receipt.account_email}</p>
-            <p>Reservation: <strong>RES-{String(receipt.reservation_id).padStart(4, '0')}</strong> · Date: {formatDate(receipt.reservation_date)}</p>
-            <p>GCash reference: <strong>{receipt.payment_reference}</strong></p>
-            <p className="payment-amount">Amount paid: ₱{Number(receipt.amount || 0).toLocaleString()}</p>
-            <p>Verified by {receipt.verified_by_name || 'staff'} · {formatDate(receipt.verified_at)} · Issued {formatDate(receipt.issued_at)}</p>
-            <div className="admin-form-actions">
-              <button type="button" className="btn btn-primary" onClick={() => window.print()}>Print Receipt</button>
-              <button type="button" className="btn btn-outline" onClick={() => setReceipt(null)}>Close</button>
+          <section className="payment-checkout card printable-receipt" aria-labelledby="receipt-title" aria-live="polite">
+            <div className="receipt-header">
+              <h2>Cogon Cemetery Memorial Records System</h2>
+              <p>Barangay Cogon, Municipality of Cordova, Cebu</p>
+              <h3 id="receipt-title" className="receipt-number">Official Receipt · {receipt.receipt_no}</h3>
+            </div>
+
+            <div className="receipt-details-grid">
+              <div>
+                <span className="receipt-label">Deceased Person</span>
+                <strong className="receipt-value">{receipt.deceased_name || 'Burial Plot Reservation'}</strong>
+              </div>
+              <div>
+                <span className="receipt-label">Cemetery Spot</span>
+                <strong className="receipt-value">
+                  {receipt.plot_section
+                    ? `Section ${receipt.plot_section}, Plot ${String(receipt.plot_number).padStart(2, '0')}`
+                    : receipt.memorial_name || 'Assigned Spot'}
+                </strong>
+              </div>
+              <div>
+                <span className="receipt-label">Family Representative / Payer</span>
+                <strong className="receipt-value">{receipt.visitor_name} {receipt.contact ? `(${receipt.contact})` : ''}</strong>
+              </div>
+              <div>
+                <span className="receipt-label">Reservation Date</span>
+                <strong className="receipt-value">{formatDate(receipt.reservation_date)}</strong>
+              </div>
+              <div>
+                <span className="receipt-label">Payment Method</span>
+                <strong className="receipt-value">{receipt.payment_method || 'Cash (Walk-in)'}</strong>
+              </div>
+              <div>
+                <span className="receipt-label">Amount Paid</span>
+                <strong className="receipt-value receipt-amount">₱{Number(receipt.amount || 0).toLocaleString()}</strong>
+              </div>
+              <div>
+                <span className="receipt-label">Received &amp; Verified By</span>
+                <strong className="receipt-value">{receipt.verified_by_name || user?.name || 'Staff'}</strong>
+              </div>
+              <div>
+                <span className="receipt-label">Date Issued</span>
+                <strong className="receipt-value">{formatDate(receipt.issued_at || new Date())}</strong>
+              </div>
+            </div>
+
+            <p className="receipt-footer-note">
+              This serves as official confirmation of the burial plot reservation. Families and walk-in visitors may locate and visit this section and spot anytime using the interactive cemetery map.
+            </p>
+
+            <div className="admin-form-actions no-print">
+              <button type="button" className="btn btn-primary" onClick={() => window.print()}>
+                🖨️ Print Official Receipt
+              </button>
+              <button type="button" className="btn btn-outline" onClick={() => setReceipt(null)}>
+                Close
+              </button>
             </div>
           </section>
         )}
+
+        {/* Payment History / Receipts List */}
+        <h2 className="section-title">Payment History &amp; Official Receipts</h2>
         {isLoading ? (
           <p className="payment-empty">Loading payment history...</p>
         ) : payments.length === 0 ? (
-          <p className="payment-empty">No payments yet.</p>
+          <p className="payment-empty">No payments recorded yet.</p>
         ) : (
           <div className="payments-list">
             {payments.map((payment) => (
               <article key={payment.id} className="payment-item card">
                 <div>
-                  <h3>{payment.memorial_name}</h3>
-                  <p>Visitor: {payment.visitor_name}</p>
-                  <p>Method: {payment.payment_method || 'GCash'}</p>
-                  {payment.payment_reference && <p>Reference: {payment.payment_reference}</p>}
-                  <p>Date: {formatDate(payment.transaction_date)}</p>
-                  {payment.admin_note && <p><small>Staff note: {payment.admin_note}</small></p>}
-                  {payment.payment_status === 'completed' && (
-                    payment.settlement_id
-                      ? <p>Money destination: <strong>Remitted → {payment.remitted_to || 'treasury'}</strong>{payment.settlement_ref ? ` (Ref ${payment.settlement_ref})` : ''}</p>
-                      : <p>Money destination: <strong>Held in GCash wallet</strong></p>
+                  <div className="payment-heading-row">
+                    <h3>{payment.receipt_no || `REC-${payment.id}`}</h3>
+                    <span className="badge badge-completed">Paid in Cash</span>
+                  </div>
+                  <p>
+                    <strong>Spot:</strong> {payment.memorial_name || (payment.plot_section ? `Section ${payment.plot_section}, Plot ${payment.plot_number}` : 'Cemetery Plot')}
+                  </p>
+                  {payment.deceased_name && (
+                    <p>
+                      <strong>Deceased:</strong> {payment.deceased_name}
+                    </p>
+                  )}
+                  <p>
+                    <strong>Payer:</strong> {payment.visitor_name} {payment.contact ? `(${payment.contact})` : ''}
+                  </p>
+                  <p>
+                    <strong>Payment Mode:</strong> {payment.payment_method || 'Cash (Walk-in)'}
+                  </p>
+                  <p>
+                    <strong>Date:</strong> {formatDate(payment.transaction_date)}
+                  </p>
+                  {payment.verified_by_name && (
+                    <p><small>Received by staff: {payment.verified_by_name}</small></p>
+                  )}
+                  {payment.admin_note && (
+                    <p><small>Note: {payment.admin_note}</small></p>
                   )}
                 </div>
                 <div className="payment-item-right">
                   <p className="payment-amount">₱{parseFloat(payment.amount).toLocaleString()}</p>
-                  <span className={`badge badge-${payment.payment_status}`}>{payment.payment_status.replaceAll('_', ' ')}</span>
-                  {payment.payment_status === 'completed' && (
-                    <button
-                      type="button"
-                      className="btn btn-outline"
-                      disabled={receiptLoadingId === payment.id}
-                      onClick={() => handleViewReceipt(payment.id)}
-                    >
-                      {receiptLoadingId === payment.id ? 'Loading...' : 'View Receipt'}
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    disabled={receiptLoadingId === payment.id}
+                    onClick={() => handleViewReceipt(payment.id)}
+                  >
+                    {receiptLoadingId === payment.id ? 'Loading...' : 'View / Print Receipt'}
+                  </button>
                 </div>
               </article>
             ))}

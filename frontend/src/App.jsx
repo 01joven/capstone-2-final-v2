@@ -1,9 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import ProtectedRoute, { AdminRoute, StaffRoute } from './components/ProtectedRoute';
 import LandingPage from './pages/LandingPage';
-import Login from './pages/Login';
-import Register from './pages/Register';
-import Onboarding from './pages/Onboarding';
 import Dashboard from './pages/Dashboard';
 import MapView from './pages/MapView';
 import Search from './pages/Search';
@@ -25,15 +22,11 @@ function App() {
     <ErrorBoundary>
       <Routes>
         <Route path="/" element={<LandingPage />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/staff/login" element={<StaffLogin />} />
         <Route path="/staff/register" element={<Navigate to="/staff/login" replace />} />
-        <Route path="/forgot-password" element={<PasswordRecovery audience="user" />} />
         <Route path="/admin/recovery" element={<PasswordRecovery audience="admin" />} />
         <Route path="/staff/recovery" element={<PasswordRecovery audience="staff" />} />
-        <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/map" element={<ProtectedRoute><MapView /></ProtectedRoute>} />
         <Route path="/search" element={<ProtectedRoute><Search /></ProtectedRoute>} />

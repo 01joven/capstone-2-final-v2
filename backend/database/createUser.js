@@ -1,23 +1,23 @@
 const bcrypt = require('bcryptjs');
 const pool = require('../config/db');
 
-const ALLOWED_ROLES = ['user', 'staff', 'admin'];
+const ALLOWED_ROLES = ['staff', 'admin'];
 
 const createUser = async () => {
   const [, , rawName, rawEmail, rawPassword, rawRole] = process.argv;
   const name = typeof rawName === 'string' ? rawName.trim() : '';
   const email = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : '';
   const password = typeof rawPassword === 'string' ? rawPassword : '';
-  const role = typeof rawRole === 'string' && rawRole ? rawRole.trim().toLowerCase() : 'user';
+  const role = typeof rawRole === 'string' && rawRole ? rawRole.trim().toLowerCase() : 'staff';
 
   if (!name || name.length > 100) {
-    throw new Error('Usage: npm run user:create -- "Full Name" email@example.com password [user|staff|admin]');
+    throw new Error('Usage: npm run user:create -- "Full Name" email@example.com password [staff|admin]');
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    throw new Error('Usage: npm run user:create -- "Full Name" email@example.com password [user|staff|admin]');
+    throw new Error('Usage: npm run user:create -- "Full Name" email@example.com password [staff|admin]');
   }
   if (!ALLOWED_ROLES.includes(role)) {
-    throw new Error('Role must be one of: user, staff, admin.');
+    throw new Error('Role must be one of: staff, admin.');
   }
   const minimumLength = role === 'admin' ? 12 : 8;
   if (password.length < minimumLength || Buffer.byteLength(password, 'utf8') > 72) {

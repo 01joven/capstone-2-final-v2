@@ -12,6 +12,8 @@ const {
   getCollections,
   getSettlements,
   createSettlement,
+  voidSettlement,
+  searchReceipts,
   getUsers,
   createUser,
   updateUserRole,
@@ -36,6 +38,8 @@ router.get('/reports', getReports);
 router.get('/collections', getCollections);
 router.get('/settlements', getSettlements);
 router.post('/settlements', createSettlement);
+router.delete('/settlements/:id', voidSettlement);
+router.get('/receipts/search', searchReceipts);
 router.get('/users', getUsers);
 router.post('/users', createUser);
 router.put('/users/:id/role', updateUserRole);

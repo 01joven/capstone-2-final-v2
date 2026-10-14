@@ -1,22 +1,4 @@
 const pool = require('../config/db');
-const { sendEmail } = require('../services/emailService');
-
-// Best-effort notification: never fails the verification action.
-const notifyPaymentAccount = (to, name, action, amount, reference, note, receiptNo) => {
-  if (!to || !process.env.RESEND_API_KEY || !process.env.RESEND_FROM_EMAIL) return;
-  const greeting = `Hello ${name || 'valued customer'},\n\n`;
-  const body = action === 'approve'
-    ? `Your GCash payment of ₱${Number(amount).toLocaleString()} (ref ${reference}) has been verified and your reservation is confirmed.` +
-      (receiptNo ? ` Your official receipt is ${receiptNo}.` : '')
-    : `Your GCash payment (ref ${reference}) could not be verified. You can submit a new reference number from the Payments page.` +
-      (note ? `\n\nNote from staff: ${note}` : '');
-  sendEmail({
-    to,
-    subject: action === 'approve' ? 'Payment verified — reservation confirmed' : 'Payment needs attention',
-    text: greeting + body + '\n\nThank you.',
-    html: `<p>${(greeting + body).replace(/\n/g, '<br />')}</p>`,
-  }).catch((emailError) => console.error('Payment notification error:', emailError.message));
-};
 
 const receiptNoFor = (paymentId) => {
   const year = new Date().getFullYear();
@@ -37,16 +19,21 @@ const ensureReceipt = async (db, paymentId, issuedBy) => {
 
 const getUserPayments = async (req, res) => {
   try {
+    const isPrivileged = req.user.role === 'staff' || req.user.role === 'admin';
     const result = await pool.query(
-      `SELECT p.*, r.visitor_name, r.reservation_date, m.name AS memorial_name,
-              s.to_account AS remitted_to, s.transfer_ref AS settlement_ref
+      `SELECT p.*, r.visitor_name, r.deceased_name, r.contact, r.reservation_date, r.plot_section, r.plot_number,
+              COALESCE(m.name, CONCAT('Section ', r.plot_section, ', Plot ', LPAD(r.plot_number::text, 2, '0'))) AS memorial_name,
+              rc.receipt_no, rc.issued_at, v.name AS verified_by_name,
+              u.name AS account_name, u.email AS account_email
        FROM payments p
        JOIN reservations r ON p.reservation_id = r.id
-       JOIN memorials m ON r.memorial_id = m.id
-       LEFT JOIN settlement_transfers s ON s.id = p.settlement_id
-       WHERE r.user_id = $1
+       LEFT JOIN users u ON r.user_id = u.id
+       LEFT JOIN memorials m ON r.memorial_id = m.id
+       LEFT JOIN receipts rc ON rc.payment_id = p.id
+       LEFT JOIN users v ON v.id = p.verified_by
+       ${isPrivileged ? '' : 'WHERE r.user_id = $1'}
        ORDER BY p.transaction_date DESC, p.id DESC`,
-      [req.user.id]
+      isPrivileged ? [] : [req.user.id]
     );
 
     res.json(result.rows);
@@ -59,36 +46,117 @@ const getUserPayments = async (req, res) => {
 const getPendingPayments = async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT p.id AS payment_id, p.reservation_id, p.amount, p.payment_method,
-              p.payment_reference, p.transaction_date, p.admin_note, r.visitor_name, r.contact,
-              r.reservation_date, u.name AS account_name, u.email AS account_email,
-              m.name AS memorial_name
-       FROM payments p
-       JOIN reservations r ON p.reservation_id = r.id
-       JOIN users u ON r.user_id = u.id
-       JOIN memorials m ON r.memorial_id = m.id
-       WHERE p.payment_status = 'pending_verification'
-       ORDER BY p.transaction_date ASC, p.id ASC`
+      `SELECT r.id AS reservation_id, r.visitor_name, r.deceased_name, r.contact,
+              r.plot_section, r.plot_number, r.reservation_date, r.total_price, r.status AS reservation_status,
+              COALESCE(m.name, CONCAT('Section ', r.plot_section, ', Plot ', LPAD(r.plot_number::text, 2, '0'))) AS memorial_name,
+              u.name AS account_name, u.email AS account_email,
+              p.id AS payment_id, p.payment_status, p.amount
+       FROM reservations r
+       LEFT JOIN users u ON r.user_id = u.id
+       LEFT JOIN memorials m ON r.memorial_id = m.id
+       LEFT JOIN payments p ON p.reservation_id = r.id AND p.payment_status = 'completed'
+       WHERE r.status = 'pending' AND p.id IS NULL
+       ORDER BY r.created_at DESC`
     );
 
     res.json(result.rows);
   } catch (error) {
     console.error('Get pending payments error:', error);
-    res.status(500).json({ message: 'Unable to load pending payment verifications.' });
+    res.status(500).json({ message: 'Unable to load unpaid reservations.' });
+  }
+};
+
+const recordCashPayment = async (req, res) => {
+  const reservationId = Number((req.body || {}).reservation_id);
+  const amount = Number((req.body || {}).amount);
+  const note = typeof (req.body || {}).note === 'string' ? req.body.note.trim() : null;
+
+  if (!Number.isSafeInteger(reservationId) || reservationId < 1) {
+    return res.status(400).json({ message: 'A valid reservation ID is required.' });
+  }
+  if (!Number.isFinite(amount) || amount < 0) {
+    return res.status(400).json({ message: 'A valid payment amount is required.' });
+  }
+
+  let client;
+  let transactionStarted = false;
+  try {
+    client = await pool.connect();
+    await client.query('BEGIN');
+    transactionStarted = true;
+
+    const reservationResult = await client.query(
+      'SELECT * FROM reservations WHERE id = $1 FOR UPDATE',
+      [reservationId]
+    );
+    const reservation = reservationResult.rows[0];
+    if (!reservation) {
+      await client.query('ROLLBACK');
+      transactionStarted = false;
+      return res.status(404).json({ message: 'Reservation not found.' });
+    }
+    if (reservation.status === 'cancelled') {
+      await client.query('ROLLBACK');
+      transactionStarted = false;
+      return res.status(409).json({ message: 'This reservation has been cancelled.' });
+    }
+
+    const existingPayment = await client.query(
+      "SELECT * FROM payments WHERE reservation_id = $1 AND payment_status = 'completed' LIMIT 1 FOR UPDATE",
+      [reservationId]
+    );
+    if (existingPayment.rows.length > 0) {
+      await client.query('ROLLBACK');
+      transactionStarted = false;
+      return res.status(409).json({ message: 'This reservation already has a completed cash payment.' });
+    }
+
+    const cashRef = `CASH-${Date.now().toString().slice(-6)}`;
+    const paymentResult = await client.query(
+      `INSERT INTO payments (reservation_id, amount, payment_method, payment_reference, payment_status, verified_by, verified_at, admin_note)
+       VALUES ($1, $2, 'Cash', $3, 'completed', $4, CURRENT_TIMESTAMP, $5)
+       RETURNING *`,
+      [reservationId, amount, cashRef, req.user.id, note || 'Walk-in cash payment']
+    );
+    const payment = paymentResult.rows[0];
+
+    await client.query(
+      "UPDATE reservations SET status = 'confirmed', total_price = $1 WHERE id = $2",
+      [amount, reservationId]
+    );
+
+    const receipt = await ensureReceipt(client, payment.id, req.user.id);
+
+    await client.query('COMMIT');
+    transactionStarted = false;
+
+    res.status(201).json({
+      message: 'Cash payment recorded and official receipt issued.',
+      payment,
+      receipt_no: receipt.receipt_no,
+      receipt_id: receipt.id,
+    });
+  } catch (error) {
+    if (transactionStarted) {
+      await client.query('ROLLBACK').catch((err) => console.error('Rollback error:', err));
+    }
+    console.error('Record cash payment error:', error);
+    res.status(500).json({ message: 'Unable to record cash payment.' });
+  } finally {
+    if (client) client.release();
   }
 };
 
 const createPayment = async (req, res) => {
   const reservationId = Number((req.body || {}).reservation_id);
+  const amount = Number((req.body || {}).amount);
+  const paymentMethod = typeof (req.body || {}).payment_method === 'string' ? req.body.payment_method.trim() : 'Cash';
   const paymentReference = typeof (req.body || {}).payment_reference === 'string'
     ? req.body.payment_reference.trim()
-    : '';
+    : `CASH-${Date.now().toString().slice(-6)}`;
 
   if (!Number.isSafeInteger(reservationId) || reservationId < 1) {
     return res.status(400).json({ message: 'A valid reservation ID is required.' });
-  }
-  if (!/^[A-Z0-9-]{6,30}$/i.test(paymentReference)) {
-    return res.status(400).json({ message: 'Enter a valid GCash reference number (6 to 30 letters, numbers, or hyphens).' });
   }
 
   let client;
@@ -99,8 +167,8 @@ const createPayment = async (req, res) => {
     transactionStarted = true;
 
     const reservation = await client.query(
-      'SELECT * FROM reservations WHERE id = $1 AND user_id = $2 FOR UPDATE',
-      [reservationId, req.user.id]
+      'SELECT * FROM reservations WHERE id = $1 FOR UPDATE',
+      [reservationId]
     );
     if (reservation.rows.length === 0) {
       await client.query('ROLLBACK');
@@ -112,64 +180,34 @@ const createPayment = async (req, res) => {
       transactionStarted = false;
       return res.status(409).json({ message: 'This reservation is no longer active.' });
     }
-    if (reservation.rows[0].plot_section) {
-      await client.query('ROLLBACK');
-      transactionStarted = false;
-      return res.status(400).json({ message: 'Plot reservations do not use online payments; a staff member will review your request.' });
-    }
-    if (reservation.rows[0].status === 'confirmed') {
-      await client.query('ROLLBACK');
-      transactionStarted = false;
-      return res.status(409).json({ message: 'This reservation is already confirmed.' });
-    }
 
-    const existingResult = await client.query(
-      'SELECT * FROM payments WHERE reservation_id = $1 ORDER BY transaction_date DESC, id DESC LIMIT 1 FOR UPDATE',
-      [reservationId]
+    const payAmount = Number.isFinite(amount) && amount > 0 ? amount : Number(reservation.rows[0].total_price) || 0;
+
+    const result = await client.query(
+      `INSERT INTO payments (reservation_id, amount, payment_method, payment_reference, payment_status, verified_by, verified_at)
+       VALUES ($1, $2, $3, $4, 'completed', $5, CURRENT_TIMESTAMP)
+       RETURNING *`,
+      [reservationId, payAmount, paymentMethod, paymentReference, req.user.id]
     );
-    const existingPayment = existingResult.rows[0];
-    if (existingPayment?.payment_status === 'pending_verification') {
-      await client.query('ROLLBACK');
-      transactionStarted = false;
-      return res.status(409).json({ message: 'Your payment is already submitted and waiting for verification.' });
-    }
-    if (existingPayment?.payment_status === 'completed') {
-      await client.query('ROLLBACK');
-      transactionStarted = false;
-      return res.status(409).json({ message: 'This reservation already has a completed payment.' });
-    }
 
-    const result = existingPayment
-      ? await client.query(
-        `UPDATE payments
-         SET payment_method = 'GCash', payment_reference = $1,
-             payment_status = 'pending_verification', transaction_date = CURRENT_TIMESTAMP,
-             verified_by = NULL, verified_at = NULL, admin_note = NULL
-         WHERE id = $2
-         RETURNING *`,
-        [paymentReference, existingPayment.id]
-      )
-      : await client.query(
-        `INSERT INTO payments (reservation_id, amount, payment_method, payment_reference, payment_status)
-         VALUES ($1, $2, 'GCash', $3, 'pending_verification')
-         RETURNING *`,
-        [reservationId, reservation.rows[0].total_price, paymentReference]
-      );
+    await client.query(
+      "UPDATE reservations SET status = 'confirmed', total_price = $1 WHERE id = $2",
+      [payAmount, reservationId]
+    );
+
+    const receipt = await ensureReceipt(client, result.rows[0].id, req.user.id);
 
     await client.query('COMMIT');
     transactionStarted = false;
-    res.status(existingPayment ? 200 : 201).json(result.rows[0]);
+    res.status(201).json({ ...result.rows[0], receipt_no: receipt.receipt_no });
   } catch (error) {
     if (transactionStarted) {
       await client.query('ROLLBACK').catch((rollbackError) => {
         console.error('Payment submission rollback error:', rollbackError);
       });
     }
-    if (error.code === '23505') {
-      return res.status(409).json({ message: 'That GCash reference number has already been submitted.' });
-    }
-    console.error('Submit payment for verification error:', error);
-    res.status(500).json({ message: 'Unable to submit payment for verification.' });
+    console.error('Payment error:', error);
+    res.status(500).json({ message: 'Unable to record payment.' });
   } finally {
     if (client) client.release();
   }
@@ -210,21 +248,6 @@ const verifyPayment = async (req, res) => {
       transactionStarted = false;
       return res.status(404).json({ message: 'Payment not found.' });
     }
-    if (Number(payment.user_id) === Number(req.user.id)) {
-      await client.query('ROLLBACK');
-      transactionStarted = false;
-      return res.status(403).json({ message: 'You cannot verify your own payment.' });
-    }
-    if (payment.payment_status !== 'pending_verification') {
-      await client.query('ROLLBACK');
-      transactionStarted = false;
-      return res.status(409).json({ message: 'This payment has already been reviewed.' });
-    }
-    if (payment.reservation_status !== 'pending') {
-      await client.query('ROLLBACK');
-      transactionStarted = false;
-      return res.status(409).json({ message: 'The reservation is no longer pending.' });
-    }
 
     const paymentStatus = action === 'approve' ? 'completed' : 'rejected';
     await client.query(
@@ -234,17 +257,10 @@ const verifyPayment = async (req, res) => {
       [paymentStatus, req.user.id, note || null, paymentId]
     );
     if (action === 'approve') {
-      // Conditional update: a concurrent cancellation commits first, this
-      // affects zero rows instead of resurrecting the reservation.
-      const confirmed = await client.query(
+      await client.query(
         "UPDATE reservations SET status = 'confirmed' WHERE id = $1 AND status = 'pending'",
         [payment.reservation_id]
       );
-      if (confirmed.rowCount === 0) {
-        await client.query('ROLLBACK');
-        transactionStarted = false;
-        return res.status(409).json({ message: 'The reservation is no longer pending.' });
-      }
     }
 
     let receipt = null;
@@ -254,17 +270,11 @@ const verifyPayment = async (req, res) => {
 
     await client.query('COMMIT');
     transactionStarted = false;
-    if (payment.account_email) {
-      notifyPaymentAccount(
-        payment.account_email,
-        payment.account_name || payment.visitor_name,
-        action, payment.amount, payment.payment_reference, note, receipt?.receipt_no
-      );
-    }
+
     res.json({
       message: action === 'approve'
         ? 'Payment verified. Reservation confirmed.'
-        : 'Payment rejected. The customer can submit a new reference number.',
+        : 'Payment marked as rejected.',
       payment_status: paymentStatus,
       ...(receipt ? { receipt_no: receipt.receipt_no, receipt_id: receipt.id } : {}),
     });
@@ -275,7 +285,7 @@ const verifyPayment = async (req, res) => {
       });
     }
     console.error('Verify payment error:', error);
-    res.status(500).json({ message: 'Unable to verify payment.' });
+    res.status(500).json({ message: 'Unable to update payment.' });
   } finally {
     if (client) client.release();
   }
@@ -290,13 +300,14 @@ const getPaymentReceipt = async (req, res) => {
     const result = await pool.query(
       `SELECT p.id, p.reservation_id, p.amount, p.payment_method, p.payment_reference,
               p.payment_status, p.transaction_date, p.verified_by, p.verified_at,
-              r.visitor_name, r.reservation_date, r.user_id,
-              m.name AS memorial_name,
+              r.visitor_name, r.deceased_name, r.contact, r.plot_section, r.plot_number,
+              r.reservation_date, r.user_id,
+              COALESCE(m.name, CONCAT('Section ', r.plot_section, ', Plot ', LPAD(r.plot_number::text, 2, '0'))) AS memorial_name,
               u.name AS account_name, u.email AS account_email,
               v.name AS verified_by_name
        FROM payments p
        JOIN reservations r ON p.reservation_id = r.id
-       JOIN users u ON r.user_id = u.id
+       LEFT JOIN users u ON r.user_id = u.id
        LEFT JOIN memorials m ON r.memorial_id = m.id
        LEFT JOIN users v ON v.id = p.verified_by
        WHERE p.id = $1`,
@@ -306,25 +317,20 @@ const getPaymentReceipt = async (req, res) => {
     if (!payment) {
       return res.status(404).json({ message: 'Payment not found.' });
     }
-    const isOwner = Number(payment.user_id) === Number(req.user.id);
-    const isPrivileged = req.user.role === 'staff' || req.user.role === 'admin';
-    if (!isOwner && !isPrivileged) {
-      return res.status(403).json({ message: 'Access denied.' });
-    }
-    if (payment.payment_status !== 'completed') {
-      return res.status(409).json({ message: 'A receipt is issued only after the payment is verified.' });
-    }
-    // Backfill receipts for payments approved before this module existed.
     const receipt = await ensureReceipt(pool, paymentId, payment.verified_by || req.user.id);
     res.json({
       receipt_no: receipt.receipt_no,
       issued_at: receipt.issued_at,
       amount: payment.amount,
-      payment_method: payment.payment_method,
+      payment_method: payment.payment_method || 'Cash',
       payment_reference: payment.payment_reference,
       reservation_id: payment.reservation_id,
       memorial_name: payment.memorial_name,
+      deceased_name: payment.deceased_name,
       visitor_name: payment.visitor_name,
+      contact: payment.contact,
+      plot_section: payment.plot_section,
+      plot_number: payment.plot_number,
       account_name: payment.account_name,
       account_email: payment.account_email,
       reservation_date: payment.reservation_date,
@@ -337,4 +343,11 @@ const getPaymentReceipt = async (req, res) => {
   }
 };
 
-module.exports = { getUserPayments, getPendingPayments, createPayment, verifyPayment, getPaymentReceipt };
+module.exports = {
+  getUserPayments,
+  getPendingPayments,
+  recordCashPayment,
+  createPayment,
+  verifyPayment,
+  getPaymentReceipt,
+};

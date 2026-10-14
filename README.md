@@ -23,16 +23,15 @@ Copy-Item backend/.env.example backend/.env
 
 To use Neon, uncomment `DATABASE_URL` in `backend/.env` and replace the example with your real PostgreSQL connection string. With `DATABASE_URL` unset, the app selects local mode and creates its own private JWT secret. For Neon, set `JWT_SECRET` to a private random value at least 32 characters long. Do not commit or share `backend/.env`.
 
-User registration no longer requires email verification. Public registration at `/register` creates a `user` account immediately. There is no public staff or admin registration.
+User registration no longer requires email verification. Account creation is administrator-only; new staff and administrator accounts are created in User Management. There is no public registration page or endpoint.
 
 Configure Resend with `RESEND_API_KEY` and `RESEND_FROM_EMAIL` in `backend/.env` to enable email delivery. This is required for self-service password resets. Set `CORS_ORIGINS` to the frontend origin(s) allowed to call the API. Create an API key at https://resend.com/api-keys and verify a sending domain. If reset email delivery is unavailable, an administrator can use the operator reset command below.
 
 If an existing user account needs administrator access, stop the local app and run `npm run admin:promote -- your-admin-email@example.com` from the project root, then restart and sign in again. For Neon, you can instead run `UPDATE users SET role = 'admin' WHERE email = 'your-admin-email@example.com';` in the database console. Promote only trusted administrator accounts. Customers submit the GCash transaction reference after scanning the static InstaPay QR; reservations remain pending until a staff member checks the payment and approves it in Payments. The QR does not send automatic payment confirmations.
 
-Users, staff, and administrators can reset their password from their login screens using a six-digit code sent to the registered email. Codes expire after 10 minutes, allow at most five attempts each, and accounts are limited to one request per minute and five per hour. After 10 failed attempts within an hour, the account must wait before trying again. Codes are stored as keyed HMACs, not plain hashes. Password resets, password changes, and sign-outs revoke existing sessions. Administrator passwords must be at least 12 characters. To change an administrator email, run `npm run admin:change-email -- old-admin@example.com new-admin@example.com --verified-authorized`. As a recovery fallback, run `npm run admin:reset-password -- admin@example.com --verified-authorized` and enter the new password in the private terminal prompt.
+Authenticated users (staff or administrator) can reset their password from their login screens using a six-digit code sent to the registered email. Codes expire after 10 minutes, allow at most five attempts each, and accounts are limited to one request per minute and five per hour. After 10 failed attempts within an hour, the account must wait before trying again. Codes are stored as keyed HMACs, not plain hashes. Password resets, password changes, and sign-outs revoke existing sessions. Administrator passwords must be at least 12 characters. To change an administrator email, run `npm run admin:change-email -- old-admin@example.com new-admin@example.com --verified-authorized`. As a recovery fallback, run `npm run admin:reset-password -- admin@example.com --verified-authorized` and enter the new password in the private terminal prompt.
 
 The dev server creates the local database tables and memorial site records automatically. For local development it seeds an administrator only if you set a password in `backend/.env`:
-
 - `ADMIN_SEED_PASSWORD` (required, at least 12 characters). Nothing is seeded if it is unset.
 - `ADMIN_SEED_EMAIL` (optional, defaults to `admin@cemetery.gov`).
 
@@ -52,7 +51,7 @@ npm run admin:seed
 
 ### Real accounts and staff access
 
-The system runs on real data. There are three actors: **User**, **Staff**, and **Administrator**. Public registration at `/register` creates a `user` account immediately (no email verification); there is no public staff or admin registration.
+The system runs on real data. There are two actors: **Staff** and **Administrator**. Public registration is not available; staff and administrator accounts are created by administrators in User Management.
 
 To bootstrap the first real accounts, stop the app and create them directly:
 
@@ -61,13 +60,19 @@ npm run user:create -- "Admin Name" admin@example.com StrongPassword123 admin
 npm run user:create -- "Staff Name" staff@example.com StrongPassword123 staff
 ```
 
+To create a staff account from an existing account that does not yet have staff access, stop the app and run:
+
+```powershell
+npm run staff:promote -- staff@example.com
+```
+
 To grant staff access to an existing registered account instead, stop the app and run:
 
 ```powershell
 npm run staff:promote -- staff@example.com
 ```
 
-Sign-in pages: users at `/login`, staff at `/staff/login`, administrators at `/admin/login`. Staff manage memorial records, memorial sites, reservations, reports, collections, and payment verification, but cannot access User Management; that stays administrator-only. Administrators can create staff or administrator accounts in User Management and change roles, deactivate, or delete accounts there (never their own, and never the last administrator). Public registration continues to create regular user accounts. Administrator credential recovery and email changes are performed by a trusted operator, not from self-service account screens.
+Sign-in pages: staff at `/staff/login`, administrators at `/admin/login`. Staff manage memorial records, memorial sites, reservations, reports, collections, and payment verification, but cannot access User Management; that stays administrator-only. Administrators can create staff or administrator accounts in User Management and change roles, deactivate, or delete accounts there (never their own, and never the last administrator). There is no public registration. Administrator credential recovery and email changes are performed by a trusted operator, not from self-service account screens.
 
 Start the backend and frontend together:
 
@@ -87,22 +92,17 @@ The backend checks its configuration, database connection, and required tables b
 
 ## User and administrator flows
 
-Public users register at `/register` and get immediate access (no email verification). They can then use Home, Search, Memorial Record, Map, Reservations, Saved Memorials, Submit Memorial, and Profile; their reservations, payments, and saved memorials are real operational data. Customers can submit a departed person's details (name, dates, grave reference, epitaph) from Submit Memorial; staff review each submission before it is published as a memorial record, and customers track approval in their own submissions list. Customers can request an available cemetery plot from the map; pending requests reserve the plot until staff approve or reject them. Staff sign in at `/staff/login` and work in the Staff Console: Dashboard, Memorial Records, Cemetery Map/Plots, Reservations, Reports, and payment verification, including reviewing plot requests. Administrators use `/admin/login` for the same operational screens plus User Management. There is no public staff or admin registration page or endpoint. Administrators can create new staff and administrator accounts in User Management. A trusted operator grants staff access with `npm run staff:promote -- email` and administrator access with `npm run admin:promote -- email` when changing the role of an existing account. Administrator email changes are operator-managed; password recovery is available from all three login screens via emailed reset codes, with the operator CLI reset as fallback.
+Authenticated users (staff or administrator) can use Home, Search, Memorial Record, Map, Reservations, Saved Memorials, Submit Memorial, and Profile. Staff manage memorial records, memorial sites, reservations, reports, and payment verification, including reviewing plot requests. Staff sign in at `/staff/login` and work in the Staff Console: Dashboard, Memorial Records, Cemetery Map/Plots, Reservations, Reports, and payment verification, including reviewing plot requests. Administrators use `/admin/login` for the same operational screens plus User Management. Administrators can create staff and administrator accounts in User Management and change roles, deactivate, or delete accounts there (never their own, and never the last administrator). There is no public registration. Administrator credential recovery and email changes are performed by a trusted operator, not from self-service account screens.
 
 New burial records are always real data. Saving a record requires confirming verification and publication authorization in the record form.
 
-Open pages refresh shared records, reservations, plot availability, payment reviews, saved memorials, and dashboard totals every 10 seconds while visible. Returning to a browser tab refreshes immediately. This is near-real-time polling, not instant push notifications; users need an active connection to the same running backend to see updates.
+Authenticated pages refresh shared records, reservations, plot availability, payment reviews, saved memorials, and dashboard totals every 10 seconds while visible. Returning to a browser tab refreshes immediately. This is near-real-time polling, not instant push notifications; users need an active connection to the same running backend to see updates.
 
 ## API
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/health` | Check API and database status |
-| POST | `/api/auth/register` | Register a user |
-| POST | `/api/auth/login` | Log in |
-| POST | `/api/auth/logout` | Revoke current session (requires `Bearer` token) |
-| POST | `/api/auth/admin/login` | Log in to the admin portal with an existing admin account |
-| POST | `/api/auth/staff/login` | Log in to the staff console with an existing staff account |
 | POST | `/api/auth/password-reset/request` | Request a password reset code by email |
 | POST | `/api/auth/password-reset/confirm` | Verify a reset code and set a new password |
 | GET | `/api/users/profile` | Get the signed-in user's profile |

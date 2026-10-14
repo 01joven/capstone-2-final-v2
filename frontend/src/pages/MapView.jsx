@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -52,6 +52,10 @@ const MapView = () => {
   const [error, setError] = useState('');
   const [partialWarning, setPartialWarning] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedSectionFilter, setSelectedSectionFilter] = useState('ALL');
+  const [gridScale, setGridScale] = useState('normal'); // 'normal' | 'large'
+  const [showMobilePreview, setShowMobilePreview] = useState(false);
+  const detailsRef = useRef(null);
 
   const loadMapData = useCallback(async () => {
     try {
@@ -125,13 +129,29 @@ const MapView = () => {
     ])].sort(),
     [burials, plotReservations]
   );
+
+  const displayedSections = useMemo(() => {
+    if (selectedSectionFilter === 'ALL') return sections;
+    return sections.filter((s) => s === selectedSectionFilter);
+  }, [sections, selectedSectionFilter]);
+
   const selectedBurial = burials.find((burial) => burial.id === selectedBurialId);
   const unmappedBurials = visibleBurials.filter((burial) => !burial.section);
 
   const selectBurial = (burial) => {
     setSelectedBurialId(burial.id);
+    setSelectedPlot(null);
+    setShowMobilePreview(true);
     setSearchParams({ burialId: String(burial.id) });
   };
+
+  useEffect(() => {
+    if ((selectedBurialId || selectedPlot) && detailsRef.current) {
+      if (typeof window !== 'undefined' && window.innerWidth <= 800) {
+        detailsRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+  }, [selectedBurialId, selectedPlot]);
 
   const toggleSavedMemorial = async (memorialId) => {
     setError('');
@@ -191,13 +211,13 @@ const MapView = () => {
           <>
             <div className="plot-map-toolbar card">
               <div>
-                <h2>Cogon Cemetery, Cordova</h2>
-                <p>Choose a vacant plot to request a reservation.</p>
+                <h2>Cogon Cemetery — Deceased Burial Plots</h2>
+                <p>Locate where deceased loved ones are laid to rest by section and plot. Families and walk-in visitors can visit burial spots anytime.</p>
               </div>
               <input
                 type="search"
-                aria-label="Search memorial plot"
-                placeholder="Search name, record ID, section, or lot..."
+                aria-label="Search deceased burial plot"
+                placeholder="Search deceased name, record ID, section, or lot..."
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
               />
@@ -214,12 +234,47 @@ const MapView = () => {
               <span><i className="plot-legend-dot reserved" /> Reserved</span>
             </div>
 
+            {/* Mobile & Desktop Responsive Controls: Section Switcher & Grid Zoom */}
+            <div className="plot-controls-bar">
+              <div className="section-filter-pills" role="tablist" aria-label="Filter by Section">
+                <button
+                  type="button"
+                  className={`section-pill ${selectedSectionFilter === 'ALL' ? 'active' : ''}`}
+                  onClick={() => setSelectedSectionFilter('ALL')}
+                >
+                  All Sections ({sections.length})
+                </button>
+                {sections.map((sec) => (
+                  <button
+                    key={sec}
+                    type="button"
+                    className={`section-pill ${selectedSectionFilter === sec ? 'active' : ''}`}
+                    onClick={() => setSelectedSectionFilter(sec)}
+                  >
+                    Section {sec}
+                  </button>
+                ))}
+              </div>
+
+              <div className="plot-zoom-controls">
+                <button
+                  type="button"
+                  className={`zoom-toggle-btn ${gridScale === 'large' ? 'active' : ''}`}
+                  onClick={() => setGridScale((prev) => (prev === 'normal' ? 'large' : 'normal'))}
+                  title="Toggle comfortable touch-friendly plot grid size"
+                  aria-label="Toggle touch-friendly plot grid size"
+                >
+                  {gridScale === 'normal' ? '🔍 Touch-Friendly Grid (Enlarge)' : '🔍 Standard Grid'}
+                </button>
+              </div>
+            </div>
+
             {isLoading ? (
               <p className="search-empty">Loading cemetery plots...</p>
             ) : (
               <div className="plot-map-content">
                 <div className="plot-sections">
-                  {sections.map((section) => {
+                  {displayedSections.map((section) => {
                     const sectionBurials = burials.filter((burial) => burial.section === section);
                     const plotCount = Math.max(
                       BASE_PLOTS_PER_SECTION,
@@ -231,8 +286,11 @@ const MapView = () => {
 
                     return (
                       <section className="plot-section card" key={section} aria-label={`Section ${section}`}>
-                        <h3>Section {section}</h3>
-                        <div className="plot-grid">
+                        <div className="plot-section-header">
+                          <h3>Section {section}</h3>
+                          <span className="plot-section-count">{sectionBurials.length} Occupied · {plotCount - sectionBurials.length} Available</span>
+                        </div>
+                        <div className={`plot-grid ${gridScale === 'large' ? 'zoom-large' : ''}`}>
                           {Array.from({ length: plotCount }, (_, index) => {
                             const lotNumber = index + 1;
                             const burial = sectionBurials.find((record) => record.lot_number === lotNumber);
@@ -267,6 +325,7 @@ const MapView = () => {
                                     selectBurial(burial);
                                   } else {
                                     setSelectedBurialId(null);
+                                    setShowMobilePreview(true);
                                     setSearchParams({});
                                     setSelectedPlot({ section, lotNumber });
                                   }
@@ -284,21 +343,24 @@ const MapView = () => {
                 </div>
 
                 {selectedBurial && (
-                  <article className="memorial-information card" aria-live="polite">
+                  <article ref={detailsRef} className="memorial-information card" aria-live="polite">
                     <div className="memorial-information-heading">
                       <div>
                         <p className="record-id">MR-{String(selectedBurial.id).padStart(4, '0')}</p>
                         <h2>{selectedBurial.full_name}</h2>
                       </div>
-                      <span className="badge">Verified Record</span>
+                      <span className="badge">Deceased Burial Spot</span>
                     </div>
                     <dl>
-                      <div><dt>Lot</dt><dd>{selectedBurial.plot_reference || 'Not assigned'}</dd></div>
-                      <div><dt>Section</dt><dd>{selectedBurial.section || 'Unassigned'}</dd></div>
+                      <div><dt>Section</dt><dd><strong>Section {selectedBurial.section || 'Unassigned'}</strong></dd></div>
+                      <div><dt>Plot / Lot</dt><dd><strong>{selectedBurial.plot_reference || 'Assigned Spot'}</strong></dd></div>
                       <div><dt>Date of death</dt><dd>{formatDate(selectedBurial.death_date)}</dd></div>
                       <div><dt>Cemetery</dt><dd>{selectedBurial.cemetery_name}</dd></div>
                     </dl>
                     {selectedBurial.epitaph && <p><em>“{selectedBurial.epitaph}”</em></p>}
+                    <p className="form-help" style={{ marginTop: 10, color: '#15803d' }}>
+                      📍 <strong>Visitor Guidance:</strong> Families and walk-in visitors can visit this burial spot in Section {selectedBurial.section || ''} anytime during cemetery hours.
+                    </p>
                   </article>
                 )}
 
@@ -308,35 +370,126 @@ const MapView = () => {
                   );
                   if (reservationForSelected) {
                     return (
-                      <article className="memorial-information card" aria-live="polite">
+                      <article ref={detailsRef} className="memorial-information card" aria-live="polite">
                         <div className="memorial-information-heading">
                           <div>
                             <p className="record-id">Reserved cemetery plot</p>
                             <h2>Section {selectedPlot.section}, Plot {String(selectedPlot.lotNumber).padStart(2, '0')}</h2>
                           </div>
-                          <span className="badge">{reservationForSelected.status === 'pending' ? 'Request pending review' : 'Reserved'}</span>
+                          <span className="badge">{reservationForSelected.status === 'pending' ? 'Reserved (Awaiting Cash)' : 'Reserved'}</span>
                         </div>
-                        <p>This plot is {reservationForSelected.status === 'pending' ? 'held while awaiting staff review' : 'already reserved'}. Choose a vacant plot to request a reservation.</p>
+                        <p>This plot is {reservationForSelected.status === 'pending' ? 'currently held for a deceased reservation awaiting cash payment' : 'already reserved'}. Choose a vacant plot to reserve for a deceased loved one.</p>
                       </article>
                     );
                   }
                   return (
-                    <article className="memorial-information card" aria-live="polite">
+                    <article ref={detailsRef} className="memorial-information card" aria-live="polite">
                       <div className="memorial-information-heading">
                         <div>
                           <p className="record-id">Vacant cemetery plot</p>
                           <h2>Section {selectedPlot.section}, Plot {String(selectedPlot.lotNumber).padStart(2, '0')}</h2>
                         </div>
-                        <span className="badge">Available</span>
+                        <span className="badge badge-cash">Available for Deceased</span>
                       </div>
-                      <p>Plot requests are held while pending and require staff approval. No online payment is collected for plot reservations.</p>
+                      <p>
+                        This spot is available to be reserved for a deceased loved one. Payments are accepted via <strong>Cash (Walk-in)</strong> at the cemetery administration office. No online payments.
+                      </p>
                       <Link
                         className="btn btn-primary"
                         to={`/reservations/plot/${selectedPlot.section}/${selectedPlot.lotNumber}`}
                       >
-                        Request this plot
+                        Reserve this plot for a deceased loved one
                       </Link>
                     </article>
+                  );
+                })()}
+
+                {/* Mobile Sticky Action/Preview Bar */}
+                {selectedBurial && showMobilePreview && (
+                  <aside className="mobile-plot-sticky-bar" aria-label="Selected plot preview">
+                    <div className="mobile-plot-preview-info">
+                      <span className="mobile-plot-pill occupied">
+                        {selectedBurial.section ? `${selectedBurial.section}-${String(selectedBurial.lot_number || '').padStart(2, '0')}` : 'Spot'}
+                      </span>
+                      <div className="mobile-plot-preview-text">
+                        <p className="mobile-plot-preview-name">{selectedBurial.full_name}</p>
+                        <span className="mobile-plot-preview-meta">Section {selectedBurial.section || 'Unassigned'} · Occupied</span>
+                      </div>
+                    </div>
+                    <div className="mobile-plot-preview-actions">
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-primary"
+                        onClick={() => detailsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                      >
+                        Details
+                      </button>
+                      <button
+                        type="button"
+                        className="mobile-plot-close-btn"
+                        onClick={() => {
+                          setSelectedBurialId(null);
+                          setShowMobilePreview(false);
+                          setSearchParams({});
+                        }}
+                        aria-label="Close preview"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </aside>
+                )}
+
+                {selectedPlot && showMobilePreview && (() => {
+                  const reservationForSelected = plotReservations.find((reservation) =>
+                    reservation.plot_section === selectedPlot.section && Number(reservation.plot_number) === selectedPlot.lotNumber
+                  );
+                  const isPending = reservationForSelected?.status === 'pending';
+                  return (
+                    <aside className="mobile-plot-sticky-bar" aria-label="Selected plot preview">
+                      <div className="mobile-plot-preview-info">
+                        <span className={`mobile-plot-pill ${reservationForSelected ? 'reserved' : 'available'}`}>
+                          {selectedPlot.section}-{String(selectedPlot.lotNumber).padStart(2, '0')}
+                        </span>
+                        <div className="mobile-plot-preview-text">
+                          <p className="mobile-plot-preview-name">
+                            {reservationForSelected ? (isPending ? 'Pending Cash' : 'Reserved') : 'Vacant Plot'}
+                          </p>
+                          <span className="mobile-plot-preview-meta">
+                            Section {selectedPlot.section} · {reservationForSelected ? 'Reserved' : 'Available (Cash)'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="mobile-plot-preview-actions">
+                        {!reservationForSelected ? (
+                          <Link
+                            className="btn btn-sm btn-primary"
+                            to={`/reservations/plot/${selectedPlot.section}/${selectedPlot.lotNumber}`}
+                          >
+                            Reserve
+                          </Link>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline"
+                            onClick={() => detailsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                          >
+                            Details
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="mobile-plot-close-btn"
+                          onClick={() => {
+                            setSelectedPlot(null);
+                            setShowMobilePreview(false);
+                          }}
+                          aria-label="Close preview"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </aside>
                   );
                 })()}
 
@@ -395,99 +548,120 @@ const MapView = () => {
               </p>
             )}
 
-            <div className="map-page memorial-sites-layout">
-              <div className="map-sidebar card">
-                <h3>Memorial Locations</h3>
-                <div className="map-sidebar-list">
-                  {memorials.map((memorial) => (
-                    <div key={memorial.id} className="map-sidebar-item">
-                      <img
-                        className="map-sidebar-image"
-                        src={memorial.image_url || '/cemetery-images/heritage-memorial.png'}
-                        alt={`${memorial.name} cemetery`}
-                        loading="lazy"
-                      />
-                      <h4>{memorial.name}</h4>
-                      <p>{memorial.category} · ₱{parseFloat(memorial.price).toLocaleString()}</p>
-                      <div className="map-sidebar-actions">
-                        <button
-                          type="button"
-                          className={`map-save-button ${savedItems[memorial.id] ? 'saved' : ''}`}
-                          aria-label={savedItems[memorial.id] ? `Remove ${memorial.name} from favorites` : `Save ${memorial.name} to favorites`}
-                          aria-pressed={Boolean(savedItems[memorial.id])}
-                          title={savedItems[memorial.id] ? 'Remove from favorites' : 'Add to favorites'}
-                          disabled={savingMemorialId === memorial.id}
-                          onClick={() => toggleSavedMemorial(memorial.id)}
-                        >
-                          {savingMemorialId === memorial.id ? '…' : savedItems[memorial.id] ? '❤️ Saved' : '♡ Save'}
-                        </button>
-                        <Link to={`/reservations/${memorial.id}`} className="btn btn-primary">
-                          Add Reservation
-                        </Link>
+            <div className="memorial-sites-grid-section">
+              <div className="memorial-sites-card-grid">
+                {memorials.map((memorial) => {
+                  const fallbacks = [
+                    '/cemetery-images/heritage-memorial.png',
+                    '/cemetery-images/peaceful-gardens.png',
+                    '/cemetery-images/riverside-memorial.png',
+                    '/cemetery-images/sunset-hills.png',
+                  ];
+                  const imgSrc = memorial.image_url && memorial.image_url.trim() !== ''
+                    ? memorial.image_url
+                    : fallbacks[memorial.id % fallbacks.length] || fallbacks[0];
+                  return (
+                    <div key={memorial.id} className="memorial-site-card">
+                      <div className="memorial-site-card-img-wrap">
+                        <img
+                          src={imgSrc}
+                          alt={`${memorial.name}`}
+                          loading="lazy"
+                          onError={(e) => {
+                            e.currentTarget.onerror = null;
+                            e.currentTarget.src = fallbacks[0];
+                          }}
+                        />
+                        <span className="memorial-site-category-badge">{memorial.category || 'Standard'}</span>
+                      </div>
+                      <div className="memorial-site-card-body">
+                        <h4>{memorial.name}</h4>
+                        <p className="memorial-site-price">₱{parseFloat(memorial.price).toLocaleString()} / lot</p>
+                        {memorial.description && (
+                          <p className="memorial-site-desc">{memorial.description}</p>
+                        )}
+                        <div className="memorial-site-card-actions">
+                          <button
+                            type="button"
+                            className={`map-save-button ${savedItems[memorial.id] ? 'saved' : ''}`}
+                            aria-label={savedItems[memorial.id] ? `Remove ${memorial.name} from favorites` : `Save ${memorial.name} to favorites`}
+                            aria-pressed={Boolean(savedItems[memorial.id])}
+                            title={savedItems[memorial.id] ? 'Remove from favorites' : 'Add to favorites'}
+                            disabled={savingMemorialId === memorial.id}
+                            onClick={() => toggleSavedMemorial(memorial.id)}
+                          >
+                            {savingMemorialId === memorial.id ? '…' : savedItems[memorial.id] ? '❤️ Saved' : '♡ Save'}
+                          </button>
+                          <Link to={`/reservations/${memorial.id}`} className="btn btn-primary">
+                            Reserve Plot
+                          </Link>
+                        </div>
                       </div>
                     </div>
-                  ))}
-                  {memorials.length === 0 && !isLoading && (
-                    <p className="search-empty">No memorial sites are available.</p>
-                  )}
-                </div>
+                  );
+                })}
+                {memorials.length === 0 && !isLoading && (
+                  <p className="search-empty">No memorial sites are available.</p>
+                )}
               </div>
 
-              {siteMapMode === 'cogon' ? (
-                <div className="map-container cogon-reference-map">
-                  <MapContainer
-                    center={COGON_CEMETERY_LOCATION}
-                    zoom={16}
-                    scrollWheelZoom
-                    style={{ height: '100%', width: '100%' }}
-                  >
-                    <TileLayer
-                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                    />
-                    <Marker position={COGON_CEMETERY_LOCATION}>
-                      <Popup>
-                        <strong>Cogon Cemetery</strong>
-                        <br />
-                        Cogon, Cordova, Cebu
-                        <br />
-                        <span>OpenStreetMap listing: Cordova Catholic Cemetery</span>
-                      </Popup>
-                    </Marker>
-                  </MapContainer>
-                  <p>📍 Cogon Cemetery · Cogon, Cordova, Cebu</p>
-                  <details className="cogon-map-reference">
-                    <summary>View the Cogon area map you provided</summary>
-                    <img
-                      src="/cogon-area-map.png"
-                      alt="Reference map showing Cogon, Gabi, Alegria, and Poblacion in Cordova, Cebu"
-                    />
-                  </details>
-                </div>
-              ) : (
-                <div className="map-container">
-                  <MapContainer center={COGON_CEMETERY_LOCATION} zoom={11} style={{ height: '100%', width: '100%' }}>
-                    <TileLayer
-                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                    />
-                    {memorials.filter((memorial) => isValidLatLng(memorial.latitude, memorial.longitude)).map((memorial) => (
-                      <Marker
-                        key={memorial.id}
-                        position={[Number(memorial.latitude), Number(memorial.longitude)]}
-                      >
+              <div className="memorial-sites-map-row">
+                {siteMapMode === 'cogon' ? (
+                  <div className="map-container cogon-reference-map">
+                    <MapContainer
+                      center={COGON_CEMETERY_LOCATION}
+                      zoom={16}
+                      scrollWheelZoom
+                      style={{ height: '100%', width: '100%' }}
+                    >
+                      <TileLayer
+                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                      />
+                      <Marker position={COGON_CEMETERY_LOCATION}>
                         <Popup>
-                          <strong>{memorial.name}</strong>
+                          <strong>Cogon Cemetery</strong>
                           <br />
-                          {memorial.category} — ₱{parseFloat(memorial.price).toLocaleString()}
+                          Cogon, Cordova, Cebu
                           <br />
-                          <Link to={`/reservations/${memorial.id}`}>Add Reservation</Link>
+                          <span>OpenStreetMap listing: Cordova Catholic Cemetery</span>
                         </Popup>
                       </Marker>
-                    ))}
-                  </MapContainer>
-                </div>
-              )}
+                    </MapContainer>
+                    <p>📍 Cogon Cemetery · Cogon, Cordova, Cebu</p>
+                    <details className="cogon-map-reference">
+                      <summary>View the Cogon area map you provided</summary>
+                      <img
+                        src="/cogon-area-map.png"
+                        alt="Reference map showing Cogon, Gabi, Alegria, and Poblacion in Cordova, Cebu"
+                      />
+                    </details>
+                  </div>
+                ) : (
+                  <div className="map-container">
+                    <MapContainer center={COGON_CEMETERY_LOCATION} zoom={11} style={{ height: '100%', width: '100%' }}>
+                      <TileLayer
+                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                      />
+                      {memorials.filter((memorial) => isValidLatLng(memorial.latitude, memorial.longitude)).map((memorial) => (
+                        <Marker
+                          key={memorial.id}
+                          position={[Number(memorial.latitude), Number(memorial.longitude)]}
+                        >
+                          <Popup>
+                            <strong>{memorial.name}</strong>
+                            <br />
+                            {memorial.category} — ₱{parseFloat(memorial.price).toLocaleString()}
+                            <br />
+                            <Link to={`/reservations/${memorial.id}`}>Reserve Plot</Link>
+                          </Popup>
+                        </Marker>
+                      ))}
+                    </MapContainer>
+                  </div>
+                )}
+              </div>
             </div>
           </>
         )}

@@ -1,7 +1,7 @@
 .app-layout {
   display: flex;
   min-height: 100vh;
-  background: linear-gradient(180deg, rgba(246,240,233,0.95) 0%, rgba(255,255,255,0.92) 100%);
+  background: linear-gradient(180deg, rgba(246, 240, 233, 0.95) 0%, rgba(255, 255, 255, 0.92) 100%);
 }
 
 .app-main {
@@ -10,8 +10,126 @@
   min-height: 100vh;
 }
 
+/* Mobile Top Header (Hidden on Desktop) */
+.mobile-top-header {
+  display: none;
+}
+
+.mobile-sidebar-backdrop {
+  display: none;
+}
+
 @media (max-width: 1024px) {
+  .app-layout {
+    flex-direction: column;
+  }
+
+  .mobile-top-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 64px;
+    padding: 0 20px;
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    z-index: 990;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  }
+
+  .mobile-header-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+    color: #111827;
+  }
+
+  .mobile-header-logo {
+    width: 32px;
+    height: 32px;
+  }
+
+  /* Matching bold minimal font from reference */
+  .mobile-header-title {
+    font-size: 1.35rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    color: #111827;
+  }
+
+  .mobile-header-hamburger {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    border-radius: 8px;
+    padding: 8px;
+    transition: background 0.15s ease;
+    touch-action: manipulation;
+  }
+
+  .mobile-header-hamburger:hover {
+    background: rgba(0, 0, 0, 0.05);
+  }
+
+  .hamburger-lines {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    width: 22px;
+    height: 16px;
+  }
+
+  .hamburger-lines .line {
+    display: block;
+    width: 100%;
+    height: 2.2px;
+    background-color: #111827;
+    border-radius: 9999px;
+    transition: all 0.2s ease;
+  }
+
+  .hamburger-close-x {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: #111827;
+    line-height: 1;
+  }
+
+  /* Backdrop Overlay */
+  .mobile-sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 1000;
+    animation: fadeInBackdrop 0.22s ease-out;
+  }
+
+  @keyframes fadeInBackdrop {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
   .app-main {
     margin-left: 0;
+    width: 100%;
+    min-height: calc(100vh - 64px);
   }
 }

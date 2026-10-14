@@ -5,7 +5,7 @@ const pool = require('../config/db');
 const { sendEmail } = require('../services/emailService');
 
 const PASSWORD_RESET_MESSAGE = 'If an account exists for that email, a password reset code will be sent.';
-const RESET_ROLES = ['user', 'staff', 'admin'];
+const RESET_ROLES = ['staff', 'admin'];
 const RESET_REQUESTS_PER_HOUR = 5;
 const RESET_FAILED_ATTEMPTS_PER_HOUR = 10;
 const MAX_PASSWORD_BYTES = 72;
@@ -26,53 +26,6 @@ const issueToken = (user) => jwt.sign(
   process.env.JWT_SECRET,
   { expiresIn: '12h', algorithm: 'HS256', issuer: JWT_ISSUER, audience: JWT_AUDIENCE }
 );
-
-const validateRegistration = (body = {}, role = 'user') => {
-  const normalizedName = typeof body.name === 'string' ? body.name.trim() : '';
-  const normalizedEmail = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
-
-  if (!normalizedName || !normalizedEmail || typeof body.password !== 'string') {
-    return { error: 'All fields are required.' };
-  }
-  if (normalizedName.length > 100 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
-    return { error: 'Enter a valid name and email address.' };
-  }
-  if (body.password.length < 8) {
-    return { error: 'Password must be at least 8 characters.' };
-  }
-  if (Buffer.byteLength(body.password, 'utf8') > MAX_PASSWORD_BYTES) {
-    return { error: 'Password must be no more than 72 bytes.' };
-  }
-  return { name: normalizedName, email: normalizedEmail, password: body.password, role };
-};
-
-const register = async (req, res) => {
-  const credentials = validateRegistration(req.body);
-  if (credentials.error) {
-    return res.status(400).json({ message: credentials.error });
-  }
-
-  try {
-    const passwordHash = await bcrypt.hash(credentials.password, 12);
-    const result = await pool.query(
-      `INSERT INTO users (name, email, password_hash, onboarding_completed, role)
-       VALUES ($1, $2, $3, FALSE, $4)
-       RETURNING id, name, email, onboarding_completed, role, auth_version`,
-      [credentials.name, credentials.email, passwordHash, credentials.role]
-    );
-
-    const user = result.rows[0];
-    const token = issueToken(user);
-
-    return res.status(201).json({ token, user: { ...user, is_admin: user.role === 'admin', is_staff: user.role === 'staff' } });
-  } catch (error) {
-    if (error.code === '23505') {
-      return res.status(409).json({ message: 'Email already registered. Please log in instead.' });
-    }
-    console.error('Register user error:', error);
-    return res.status(500).json({ message: 'Unable to create user account.' });
-  }
-};
 
 const authenticate = (expectedRole) => async (req, res) => {
   try {
@@ -111,12 +64,6 @@ const authenticate = (expectedRole) => async (req, res) => {
       }
       return res.status(403).json({ message: 'This account does not have staff access.' });
     }
-    if (expectedRole === 'user' && user.role !== 'user') {
-      if (user.role === 'staff') {
-        return res.status(403).json({ message: 'Please use Staff Access to sign in to this account.' });
-      }
-      return res.status(403).json({ message: 'Please use Administrator Access to sign in to this account.' });
-    }
 
     const token = issueToken(user);
 
@@ -138,7 +85,6 @@ const authenticate = (expectedRole) => async (req, res) => {
   }
 };
 
-const login = authenticate('user');
 const loginAdmin = authenticate('admin');
 const loginStaff = authenticate('staff');
 
@@ -370,8 +316,6 @@ const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (character) => (
 }[character]));
 
 module.exports = {
-  register,
-  login,
   loginAdmin,
   loginStaff,
   logout,

@@ -35,6 +35,7 @@ const getPlotReservations = async (req, res) => {
 
 const getUserReservations = async (req, res) => {
   try {
+    const isPrivileged = req.user.role === 'staff' || req.user.role === 'admin';
     const result = await pool.query(
       `SELECT r.*, m.name as memorial_name, m.image_url as memorial_image,
               c.name AS cemetery_name,
@@ -43,13 +44,24 @@ const getUserReservations = async (req, res) => {
                FROM payments p
                WHERE p.reservation_id = r.id
                ORDER BY p.transaction_date DESC, p.id DESC
-               LIMIT 1) AS payment_status
+               LIMIT 1) AS payment_status,
+              (SELECT p.amount
+               FROM payments p
+               WHERE p.reservation_id = r.id
+               ORDER BY p.transaction_date DESC, p.id DESC
+               LIMIT 1) AS paid_amount,
+              (SELECT rc.receipt_no
+               FROM payments p
+               JOIN receipts rc ON rc.payment_id = p.id
+               WHERE p.reservation_id = r.id
+               ORDER BY p.transaction_date DESC, p.id DESC
+               LIMIT 1) AS receipt_no
        FROM reservations r
        LEFT JOIN memorials m ON r.memorial_id = m.id
        LEFT JOIN cemeteries c ON r.cemetery_id = c.id
-       WHERE r.user_id = $1
+       ${isPrivileged ? '' : 'WHERE r.user_id = $1'}
        ORDER BY r.created_at DESC`,
-      [req.user.id]
+      isPrivileged ? [] : [req.user.id]
     );
 
     res.json(result.rows);
@@ -61,12 +73,14 @@ const getUserReservations = async (req, res) => {
 
 const createReservation = async (req, res) => {
   const body = req.body || {};
+  const deceasedName = typeof body.deceased_name === 'string' ? body.deceased_name.trim() : '';
   const visitorName = typeof body.visitor_name === 'string' ? body.visitor_name.trim() : '';
   const visitorContact = typeof body.contact === 'string' ? body.contact.trim() : '';
   const reservationDate = body.reservation_date;
   const plotSection = typeof body.plot_section === 'string' ? body.plot_section.trim().toUpperCase() : '';
   const plotNumber = Number(body.plot_number);
   const isPlotReservation = Boolean(plotSection || body.plot_number !== undefined);
+  const priceInput = body.total_price !== undefined ? Number(body.total_price) : (body.price !== undefined ? Number(body.price) : 0);
 
   if (isPlotReservation && body.memorial_id !== undefined) {
     return res.status(400).json({ message: 'Choose either a memorial-site reservation or a plot reservation.' });
@@ -121,10 +135,10 @@ const createReservation = async (req, res) => {
 
       const result = await client.query(
         `INSERT INTO reservations
-           (user_id, cemetery_id, plot_section, plot_number, visitor_name, contact, reservation_date, total_price, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 0, 'pending')
+           (user_id, cemetery_id, plot_section, plot_number, deceased_name, visitor_name, contact, reservation_date, total_price, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending')
          RETURNING *`,
-        [req.user.id, cemeteryId, plotSection, plotNumber, visitorName, visitorContact, reservationDate]
+        [req.user.id, cemeteryId, plotSection, plotNumber, deceasedName || null, visitorName, visitorContact, reservationDate, Math.max(0, priceInput)]
       );
       await client.query('COMMIT');
       transactionStarted = false;
@@ -159,10 +173,10 @@ const createReservation = async (req, res) => {
     const totalPrice = memorial.rows[0].price;
 
     const result = await pool.query(
-      `INSERT INTO reservations (user_id, memorial_id, visitor_name, contact, reservation_date, total_price)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO reservations (user_id, memorial_id, deceased_name, visitor_name, contact, reservation_date, total_price)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [req.user.id, memorialId, visitorName, visitorContact, reservationDate, totalPrice]
+      [req.user.id, memorialId, deceasedName || null, visitorName, visitorContact, reservationDate, totalPrice]
     );
 
     res.status(201).json(result.rows[0]);

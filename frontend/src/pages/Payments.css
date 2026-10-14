@@ -15,126 +15,206 @@
 }
 
 .payment-amount {
-  font-size: 1.4rem;
+  font-size: 1.35rem;
   font-weight: 700;
   color: var(--primary);
-  margin: 14px 0;
+  margin: 10px 0;
 }
 
-.gcash-instructions {
-  display: grid;
-  justify-items: start;
-  gap: 12px;
-  margin: 22px 0;
-}
-
-.gcash-instructions h3 {
-  color: var(--secondary);
-}
-
-.gcash-instructions ol {
-  padding-left: 22px;
-  color: var(--text-muted);
-  line-height: 1.8;
-}
-
-.gcash-qr {
-  display: block;
-  width: min(100%, 340px);
-  height: auto;
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  background: #fff;
-}
-
-.qr-payment-note {
-  max-width: 680px;
-  color: #795b20;
-  font-size: 0.9rem;
-}
-
-.payment-reference-form {
-  display: grid;
-  justify-items: start;
-  gap: 12px;
-  max-width: 520px;
-  margin-top: 20px;
-}
-
-.payment-reference-form label {
-  font-weight: 600;
-  color: var(--secondary);
-}
-
-.payment-reference-form p {
-  color: var(--text-muted);
-  font-size: 0.85rem;
-  line-height: 1.6;
-}
-
-.payment-waiting,
-.payment-verified {
-  padding: 16px;
+.cash-policy-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+  background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
+  border: 1px solid #bbf7d0;
   border-radius: 12px;
-  background: #fff4dc;
-  color: #76540f;
+  padding: 20px;
+  margin-bottom: 28px;
 }
 
-.payment-waiting p {
-  margin-top: 6px;
+.cash-policy-icon {
+  font-size: 2.2rem;
+  line-height: 1;
+}
+
+.cash-policy-banner h3 {
+  color: #166534;
+  margin-bottom: 6px;
+  font-size: 1.15rem;
+}
+
+.cash-policy-banner p {
+  color: #15803d;
+  font-size: 0.92rem;
   line-height: 1.6;
+  margin: 0;
 }
 
-.payment-verified {
-  background: #d6f1e0;
-  color: #1f6f45;
+.badge-cash {
+  background-color: #dcfce7;
+  color: #15803d;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.85rem;
 }
 
-.payment-empty {
-  color: var(--text-muted);
-}
-
-.admin-payment-review {
+.cash-payments-section {
   margin-bottom: 36px;
 }
 
-.payment-review-item {
+.unpaid-reservations-list {
+  display: grid;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.unpaid-reservation-card {
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: center;
   gap: 20px;
-  padding: 24px;
+  padding: 20px;
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 10px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.payment-review-item h3 {
-  margin-bottom: 8px;
-  color: var(--secondary);
+.unpaid-reservation-card.active-paying {
+  border-color: var(--primary, #2563eb);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
 }
 
-.payment-review-item p {
-  margin-top: 5px;
-  color: var(--text-muted);
-}
-
-.payment-review-actions {
-  display: grid;
-  justify-items: end;
+.unpaid-header {
+  display: flex;
+  align-items: center;
   gap: 10px;
+  margin-bottom: 6px;
 }
 
-.payment-review-actions > strong {
-  color: var(--primary);
+.deceased-highlight {
+  color: var(--secondary, #1e293b);
+  font-size: 1.05rem;
+  margin: 4px 0;
+}
+
+.record-cash-form {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 300px;
+}
+
+.record-cash-form h4 {
+  margin: 0 0 6px 0;
+  color: var(--secondary, #1e293b);
+}
+
+.record-cash-form label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #475569;
+  gap: 4px;
+}
+
+.record-cash-form input {
+  padding: 8px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 0.95rem;
+}
+
+.printable-receipt {
+  background: #fff;
+  border: 2px solid #cbd5e1;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+.receipt-header {
+  text-align: center;
+  border-bottom: 2px solid #e2e8f0;
+  padding-bottom: 16px;
+  margin-bottom: 20px;
+}
+
+.receipt-header h2 {
+  font-size: 1.35rem;
+  margin-bottom: 4px;
+  color: #0f172a;
+}
+
+.receipt-header p {
+  color: #64748b;
+  font-size: 0.9rem;
+  margin-bottom: 10px;
+}
+
+.receipt-number {
+  color: var(--primary, #2563eb);
   font-size: 1.2rem;
+  letter-spacing: 0.5px;
 }
 
-.payment-review-actions .btn {
-  padding: 10px 14px;
+.receipt-details-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px 24px;
+  margin-bottom: 20px;
+}
+
+.receipt-label {
+  display: block;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #64748b;
+  margin-bottom: 2px;
+}
+
+.receipt-value {
+  font-size: 1.05rem;
+  color: #0f172a;
+}
+
+.receipt-amount {
+  color: #166534;
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+.receipt-footer-note {
+  font-size: 0.85rem;
+  color: #64748b;
+  line-height: 1.6;
+  border-top: 1px dashed #cbd5e1;
+  padding-top: 12px;
+  margin-top: 16px;
+  text-align: center;
+}
+
+.payment-heading-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.payment-empty {
+  color: var(--text-muted, #64748b);
+  padding: 12px 0;
 }
 
 .payments-list {
   display: grid;
-  gap: 18px;
+  gap: 16px;
+  margin-top: 16px;
 }
 
 .payment-item {
@@ -142,43 +222,70 @@
   grid-template-columns: 1fr auto;
   align-items: center;
   gap: 20px;
-  padding: 24px;
+  padding: 20px;
 }
 
 .payment-item h3 {
-  color: var(--secondary);
-  margin-bottom: 8px;
+  color: var(--secondary, #1e293b);
+  margin: 0;
+  font-size: 1.15rem;
 }
 
 .payment-item p {
-  font-size: 0.95rem;
-  color: var(--text-muted);
+  font-size: 0.92rem;
+  color: var(--text-muted, #64748b);
+  margin: 3px 0;
 }
 
 .payment-item-right {
   text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
 }
 
-.payment-item-right .payment-amount {
-  display: block;
-  margin-bottom: 8px;
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .printable-receipt,
+  .printable-receipt * {
+    visibility: visible;
+  }
+  .printable-receipt {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 24px;
+    border: none;
+    box-shadow: none;
+  }
+  .no-print {
+    display: none !important;
+  }
 }
 
-@media (max-width: 760px) {
-  .payment-review-item {
+@media (max-width: 768px) {
+  .unpaid-reservation-card {
     grid-template-columns: 1fr;
   }
-
-  .payment-review-actions {
-    justify-items: start;
+  .unpaid-actions {
+    width: 100%;
   }
-
+  .record-cash-form {
+    min-width: 100%;
+  }
+  .receipt-details-grid {
+    grid-template-columns: 1fr;
+  }
   .payment-item {
     grid-template-columns: 1fr;
-    text-align: left;
   }
-
   .payment-item-right {
     text-align: left;
+    align-items: flex-start;
   }
 }

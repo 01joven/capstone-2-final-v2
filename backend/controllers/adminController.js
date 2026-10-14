@@ -56,8 +56,10 @@ const getDashboard = async (req, res) => {
       `SELECT
         (SELECT COUNT(*) FROM burial_records) AS records,
         (SELECT COUNT(*) FROM reservations) AS reservations,
-        (SELECT COUNT(*) FROM users WHERE role = 'user') AS users,
-        (SELECT COUNT(*) FROM payments WHERE payment_status = 'pending_verification') AS pending_payments`
+        (SELECT COUNT(*) FROM users WHERE role IN ('staff', 'admin')) AS users,
+        (SELECT COUNT(*) FROM reservations r LEFT JOIN payments p ON p.reservation_id = r.id AND p.payment_status = 'completed' WHERE r.status = 'pending' AND p.id IS NULL) AS pending_payments,
+        (SELECT COUNT(*) FROM reservations WHERE status = 'pending') AS pending_reservations,
+        (SELECT COUNT(*) FROM burial_submissions WHERE status = 'pending') AS pending_submissions`
     );
     res.json(result.rows[0]);
   } catch (error) {
@@ -261,13 +263,24 @@ const deleteRecord = async (req, res) => {
 const getReservations = async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT r.id, r.visitor_name, r.contact, r.reservation_date, r.status, r.total_price,
+      `SELECT r.id, r.visitor_name, r.deceased_name, r.contact, r.reservation_date, r.status, r.total_price,
               r.plot_section, r.plot_number, r.review_note, c.name AS cemetery_name,
               CASE WHEN r.plot_section IS NOT NULL THEN 'plot' ELSE 'memorial' END AS reservation_type,
               u.name AS account_name, u.email AS account_email, m.name AS memorial_name,
               (SELECT p.payment_status FROM payments p
                WHERE p.reservation_id = r.id
-               ORDER BY p.transaction_date DESC, p.id DESC LIMIT 1) AS payment_status
+               ORDER BY p.transaction_date DESC, p.id DESC LIMIT 1) AS payment_status,
+              (SELECT p.payment_reference FROM payments p
+               WHERE p.reservation_id = r.id
+               ORDER BY p.transaction_date DESC, p.id DESC LIMIT 1) AS payment_reference,
+              (SELECT rc.receipt_no FROM receipts rc
+               JOIN payments p ON p.id = rc.payment_id
+               WHERE p.reservation_id = r.id
+               ORDER BY p.transaction_date DESC, p.id DESC LIMIT 1) AS receipt_no,
+              (SELECT s.to_account FROM payments p
+               LEFT JOIN settlement_transfers s ON s.id = p.settlement_id
+               WHERE p.reservation_id = r.id
+               ORDER BY p.transaction_date DESC, p.id DESC LIMIT 1) AS remitted_to
        FROM reservations r
        JOIN users u ON u.id = r.user_id
        LEFT JOIN memorials m ON m.id = r.memorial_id
@@ -396,21 +409,31 @@ const updateUserRole = async (req, res) => {
   if (!Number.isSafeInteger(userId) || userId < 1) {
     return res.status(400).json({ message: 'A valid user ID is required.' });
   }
-  if (!['user', 'staff', 'admin'].includes(role)) {
-    return res.status(400).json({ message: 'Role must be user, staff, or admin.' });
+  if (!['staff', 'admin'].includes(role)) {
+    return res.status(400).json({ message: 'Role must be staff or admin.' });
   }
   if (userId === req.user.id) {
     return res.status(403).json({ message: 'You cannot change your own role.' });
   }
   try {
+    const target = await pool.query('SELECT role, is_active FROM users WHERE id = $1', [userId]);
+    if (target.rows.length === 0) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+    if (target.rows[0].role === 'admin' && target.rows[0].is_active !== false && role !== 'admin') {
+      const remaining = await pool.query(
+        "SELECT COUNT(*) FROM users WHERE role = 'admin' AND is_active IS NOT FALSE AND id <> $1",
+        [userId]
+      );
+      if (Number(remaining.rows[0].count) === 0) {
+        return res.status(409).json({ message: 'You cannot demote the last active administrator.' });
+      }
+    }
     const result = await pool.query(
       `UPDATE users SET role = $1, auth_version = auth_version + 1 WHERE id = $2
        RETURNING id, name, email, role, is_active`,
       [role, userId]
     );
-    if (result.rows.length === 0) {
-      return res.status(404).json({ message: 'User not found.' });
-    }
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Update user role error:', error);
@@ -431,14 +454,24 @@ const setUserActive = async (req, res) => {
     return res.status(403).json({ message: 'You cannot deactivate your own account.' });
   }
   try {
+    const target = await pool.query('SELECT role, is_active FROM users WHERE id = $1', [userId]);
+    if (target.rows.length === 0) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+    if (active === false && target.rows[0].role === 'admin' && target.rows[0].is_active !== false) {
+      const remaining = await pool.query(
+        "SELECT COUNT(*) FROM users WHERE role = 'admin' AND is_active IS NOT FALSE AND id <> $1",
+        [userId]
+      );
+      if (Number(remaining.rows[0].count) === 0) {
+        return res.status(409).json({ message: 'You cannot deactivate the last active administrator.' });
+      }
+    }
     const result = await pool.query(
       `UPDATE users SET is_active = $1, auth_version = auth_version + 1 WHERE id = $2
        RETURNING id, name, email, role, is_active`,
       [active, userId]
     );
-    if (result.rows.length === 0) {
-      return res.status(404).json({ message: 'User not found.' });
-    }
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Update user status error:', error);
@@ -455,14 +488,17 @@ const deleteUser = async (req, res) => {
     return res.status(403).json({ message: 'You cannot delete your own account.' });
   }
   try {
-    const target = await pool.query('SELECT role FROM users WHERE id = $1', [userId]);
+    const target = await pool.query('SELECT role, is_active FROM users WHERE id = $1', [userId]);
     if (target.rows.length === 0) {
       return res.status(404).json({ message: 'User not found.' });
     }
-    if (target.rows[0].role === 'admin') {
-      const admins = await pool.query("SELECT COUNT(*) FROM users WHERE role = 'admin'");
-      if (Number(admins.rows[0].count) <= 1) {
-        return res.status(409).json({ message: 'You cannot delete the last administrator account.' });
+    if (target.rows[0].role === 'admin' && target.rows[0].is_active !== false) {
+      const admins = await pool.query(
+        "SELECT COUNT(*) FROM users WHERE role = 'admin' AND is_active IS NOT FALSE AND id <> $1",
+        [userId]
+      );
+      if (Number(admins.rows[0].count) === 0) {
+        return res.status(409).json({ message: 'You cannot delete the last active administrator account.' });
       }
     }
     await pool.query('DELETE FROM users WHERE id = $1', [userId]);
@@ -504,7 +540,7 @@ const getCollections = async (req, res) => {
     // shares the database timezone with stored CURRENT_TIMESTAMP values.
     const rangeFilter = `verified_at::date >= COALESCE($1::date, CURRENT_DATE - INTERVAL '29 days')
            AND verified_at::date <= COALESCE($2::date, CURRENT_DATE)`;
-    const [daily, byVerifier, summary, unremitted] = await Promise.all([
+    const [daily, byVerifier, summary, unremitted, payments] = await Promise.all([
       pool.query(
         `SELECT verified_at::date AS day, COUNT(*) AS count, COALESCE(SUM(amount), 0) AS total
          FROM payments
@@ -535,6 +571,23 @@ const getCollections = async (req, res) => {
          FROM payments
          WHERE payment_status = 'completed' AND settlement_id IS NULL`
       ),
+      // Drill-down: individual verified payments in range for audit.
+      pool.query(
+        `SELECT p.id, p.amount, p.payment_reference, p.verified_at,
+                r.visitor_name, m.name AS memorial_name,
+                COALESCE(u.name, 'Unknown') AS verifier,
+                rc.receipt_no, s.to_account AS remitted_to
+         FROM payments p
+         JOIN reservations r ON r.id = p.reservation_id
+         LEFT JOIN memorials m ON m.id = r.memorial_id
+         LEFT JOIN users u ON u.id = p.verified_by
+         LEFT JOIN receipts rc ON rc.payment_id = p.id
+         LEFT JOIN settlement_transfers s ON s.id = p.settlement_id
+         WHERE p.payment_status = 'completed' AND ${rangeFilter}
+         ORDER BY p.verified_at DESC, p.id DESC
+         LIMIT 100`,
+        [range.from, range.to]
+      ),
     ]);
     const bounds = await pool.query(
       `SELECT COALESCE($1::date, CURRENT_DATE - INTERVAL '29 days')::date AS from_date,
@@ -548,6 +601,7 @@ const getCollections = async (req, res) => {
       unremitted: unremitted.rows[0],
       daily: daily.rows,
       by_verifier: byVerifier.rows,
+      payments: payments.rows,
     });
   } catch (error) {
     console.error('Get collections error:', error);
@@ -603,6 +657,30 @@ const createSettlement = async (req, res) => {
     try {
       await client.query('BEGIN');
       transactionStarted = true;
+      // Reconcile first: the recorded amount must exactly equal the
+      // unremitted verified total for the period. Nothing is written otherwise.
+      const preview = await client.query(
+        `SELECT COUNT(*) AS count, COALESCE(SUM(amount), 0) AS total
+         FROM payments
+         WHERE payment_status = 'completed'
+           AND settlement_id IS NULL
+           AND verified_at::date >= $1::date
+           AND verified_at::date <= $2::date`,
+        [periodFrom, periodTo]
+      );
+      const expectedTotal = Number(preview.rows[0].total);
+      if (Number(preview.rows[0].count) === 0) {
+        await client.query('ROLLBACK');
+        transactionStarted = false;
+        return res.status(409).json({ message: 'There are no unremitted verified payments in this period.' });
+      }
+      if (Number(amount.toFixed(2)) !== Number(expectedTotal.toFixed(2))) {
+        await client.query('ROLLBACK');
+        transactionStarted = false;
+        return res.status(400).json({
+          message: `Amount must equal the unremitted verified total for this period (₱${expectedTotal.toLocaleString()}).`,
+        });
+      }
       const result = await client.query(
         `INSERT INTO settlement_transfers (period_from, period_to, amount, from_wallet, to_account, transfer_ref, transferred_by)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -645,6 +723,81 @@ const createSettlement = async (req, res) => {
   }
 };
 
+const voidSettlement = async (req, res) => {
+  const settlementId = Number(req.params.id);
+  if (!Number.isSafeInteger(settlementId) || settlementId < 1) {
+    return res.status(400).json({ message: 'A valid settlement ID is required.' });
+  }
+  let client;
+  let transactionStarted = false;
+  try {
+    client = await pool.connect();
+    await client.query('BEGIN');
+    transactionStarted = true;
+    const existing = await client.query(
+      'SELECT id FROM settlement_transfers WHERE id = $1 FOR UPDATE',
+      [settlementId]
+    );
+    if (existing.rows.length === 0) {
+      await client.query('ROLLBACK');
+      transactionStarted = false;
+      return res.status(404).json({ message: 'Settlement transfer not found.' });
+    }
+    // Return attached payments to the wallet, then remove the transfer record.
+    const released = await client.query(
+      'UPDATE payments SET settlement_id = NULL WHERE settlement_id = $1 RETURNING id',
+      [settlementId]
+    );
+    await client.query('DELETE FROM settlement_transfers WHERE id = $1', [settlementId]);
+    await client.query('COMMIT');
+    transactionStarted = false;
+    res.json({
+      message: 'Settlement transfer voided. Attached payments returned to the GCash wallet.',
+      released_count: released.rows.length,
+    });
+  } catch (error) {
+    if (transactionStarted) {
+      await client.query('ROLLBACK').catch((rollbackError) => {
+        console.error('Void settlement rollback error:', rollbackError);
+      });
+    }
+    console.error('Void settlement error:', error);
+    res.status(500).json({ message: 'Unable to void settlement transfer.' });
+  } finally {
+    if (client) client.release();
+  }
+};
+
+const searchReceipts = async (req, res) => {
+  const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+  if (query.length < 2 || query.length > 100) {
+    return res.status(400).json({ message: 'Enter at least 2 characters to search.' });
+  }
+  try {
+    const like = `%${query}%`;
+    const result = await pool.query(
+      `SELECT rc.receipt_no, rc.issued_at, p.amount, p.payment_method,
+              p.payment_reference, p.payment_status, p.transaction_date,
+              p.reservation_id, r.visitor_name, r.reservation_date,
+              m.name AS memorial_name, u.name AS account_name, u.email AS account_email
+       FROM receipts rc
+       JOIN payments p ON p.id = rc.payment_id
+       JOIN reservations r ON r.id = p.reservation_id
+       JOIN users u ON u.id = r.user_id
+       LEFT JOIN memorials m ON m.id = r.memorial_id
+       WHERE rc.receipt_no ILIKE $1 OR p.payment_reference ILIKE $1
+          OR r.visitor_name ILIKE $1 OR COALESCE(m.name, '') ILIKE $1
+       ORDER BY rc.issued_at DESC, rc.id DESC
+       LIMIT 20`,
+      [like]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Search receipts error:', error);
+    res.status(500).json({ message: 'Unable to search receipts.' });
+  }
+};
+
 module.exports = {
   getDashboard,
   getRecords,
@@ -656,6 +809,8 @@ module.exports = {
   getCollections,
   getSettlements,
   createSettlement,
+  voidSettlement,
+  searchReceipts,
   getUsers,
   createUser,
   updateUserRole,

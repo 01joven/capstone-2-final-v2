@@ -9,11 +9,7 @@ const ProtectedRoute = ({ children }) => {
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />;
-  }
-
-  if (user.onboarding_completed === false && window.location.pathname !== '/onboarding') {
-    return <Navigate to="/onboarding" replace />;
+    return <Navigate to="/" replace />;
   }
 
   return children;

@@ -6,16 +6,18 @@ CREATE TABLE IF NOT EXISTS users (
   email VARCHAR(255) UNIQUE NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
   profile_image_url TEXT,
-  role VARCHAR(20) NOT NULL DEFAULT 'user',
+  role VARCHAR(20) NOT NULL DEFAULT 'staff',
   onboarding_completed BOOLEAN DEFAULT FALSE,
   auth_version INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'user';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'staff';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_version INTEGER NOT NULL DEFAULT 0;
--- One-time legacy migration: only touches rows still labeled 'visitor'.
-UPDATE users SET role = 'user' WHERE role = 'visitor';
+-- One-time purge: the plain 'user' (and legacy 'visitor') role no longer exists;
+-- only staff and admin accounts remain. Linked reservations, payments, submissions,
+-- and saved items are removed with the account via ON DELETE CASCADE.
+DELETE FROM users WHERE role IN ('user', 'visitor');
 
 CREATE TABLE IF NOT EXISTS user_registration_codes (
   id SERIAL PRIMARY KEY,
@@ -129,6 +131,7 @@ CREATE TABLE IF NOT EXISTS reservations (
 ALTER TABLE reservations ADD COLUMN IF NOT EXISTS cemetery_id INTEGER REFERENCES cemeteries(id) ON DELETE CASCADE;
 ALTER TABLE reservations ADD COLUMN IF NOT EXISTS plot_section VARCHAR(10);
 ALTER TABLE reservations ADD COLUMN IF NOT EXISTS plot_number INTEGER;
+ALTER TABLE reservations ADD COLUMN IF NOT EXISTS deceased_name VARCHAR(200);
 CREATE UNIQUE INDEX IF NOT EXISTS reservations_active_plot_unique
   ON reservations (cemetery_id, UPPER(plot_section), plot_number)
   WHERE plot_section IS NOT NULL AND status IN ('pending', 'confirmed');
@@ -211,8 +214,12 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TR
 -- Constraints are added NOT VALID so existing rows never block startup; new writes are checked.
 -- Run `npm run db:setup` once to VALIDATE them after legacy data is cleaned.
 DO $$ BEGIN
+  -- Recreate so the check matches the current roles (staff/admin only).
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_role_check') THEN
+    ALTER TABLE users DROP CONSTRAINT users_role_check;
+  END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_role_check') THEN
-    ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('user', 'staff', 'admin')) NOT VALID;
+    ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('staff', 'admin')) NOT VALID;
   END IF;
   -- Recreate to include 'cancelled' (customer/staff cancellation).
   IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'reservations_status_check') THEN

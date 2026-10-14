@@ -49,7 +49,7 @@ const StaffLogin = () => {
         <button type="submit" className="btn btn-primary auth-btn">Login</button>
       </form>
       <p className="auth-switch">
-        <Link to="/login">Return to User Login</Link>
+        <Link to="/">Return to Home</Link>
       </p>
     </AuthLayout>
   );

@@ -18,22 +18,20 @@ API.interceptors.response.use(
   (error) => {
     const status = error.response?.status;
     const message = error.response?.data?.message || '';
-    const isAuthExpired = status === 401 && /session|token|sign in|expired|invalid/i.test(message);
-    const isLoginRoute = window.location.pathname.startsWith('/login')
-      || window.location.pathname.startsWith('/admin/login')
+    const isAuthExpired = status === 401 && /session|token|expired|invalid/i.test(message);
+    const isLoginRoute = window.location.pathname.startsWith('/admin/login')
       || window.location.pathname.startsWith('/staff/login');
     if (isAuthExpired && !isLoginRoute) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      window.location.href = '/login';
+      window.location.href = '/';
     }
     return Promise.reject(error);
   }
 );
 
 export const authAPI = {
-  register: (data) => API.post('/auth/register', data),
-  login: (data) => API.post('/auth/login', data),
+  login: (data) => API.post('/auth/admin/login', data),
   adminLogin: (data) => API.post('/auth/admin/login', data),
   staffLogin: (data) => API.post('/auth/staff/login', data),
   requestPasswordReset: (email) => API.post('/auth/password-reset/request', { email }),
@@ -80,6 +78,7 @@ export const favoriteAPI = {
 
 export const paymentAPI = {
   getAll: () => API.get('/payments'),
+  recordCash: (data) => API.post('/payments/record-cash', data),
   create: (reservation_id, payment_reference) => API.post('/payments/create', {
     reservation_id,
     payment_reference,
@@ -103,6 +102,8 @@ export const adminAPI = {
   getCollections: (params) => API.get('/admin/collections', { params }),
   getSettlements: () => API.get('/admin/settlements'),
   createSettlement: (data) => API.post('/admin/settlements', data),
+  voidSettlement: (id) => API.delete(`/admin/settlements/${id}`),
+  searchReceipts: (q) => API.get('/admin/receipts/search', { params: { q } }),
   getUsers: () => API.get('/admin/users'),
   createUser: (data) => API.post('/admin/users', data),
   updateUserRole: (id, role) => API.put(`/admin/users/${id}/role`, { role }),

@@ -2,8 +2,6 @@ const express = require('express');
 const authMiddleware = require('../middleware/auth');
 const { createRateLimiter, emailFrom } = require('../middleware/rateLimit');
 const {
-  register,
-  login,
   loginAdmin,
   loginStaff,
   logout,
@@ -40,17 +38,6 @@ const signIn = [loginIpLimit, loginAccountLimit];
 
 const router = express.Router();
 
-const registerLimit = createRateLimiter({
-  windowMs: ONE_HOUR, max: 20, keyFn: ipKey,
-  message: 'Too many accounts created from this network. Try again later.',
-});
-const registerAccountLimit = createRateLimiter({
-  windowMs: ONE_HOUR, max: 5, keyFn: emailFrom,
-  message: 'Too many accounts created for this email address. Try again later.',
-});
-
-router.post('/register', registerLimit, registerAccountLimit, register);
-router.post('/login', signIn, login);
 router.post('/admin/login', signIn, loginAdmin);
 router.post('/staff/login', signIn, loginStaff);
 router.post('/logout', authMiddleware, logout);

@@ -164,35 +164,100 @@ const AdminPortal = ({ scope = 'admin' }) => {
   );
 };
 
+const STAT_CONFIG = {
+  'Memorial Records':      { icon: '🪦', accent: '#5a8a6e', bg: 'rgba(90,138,110,0.1)' },
+  'Reservations':          { icon: '📋', accent: '#5a7ab5', bg: 'rgba(90,122,181,0.1)' },
+  'Pending Reservations':  { icon: '⏳', accent: '#c47f2a', bg: 'rgba(196,127,42,0.1)' },
+  'Pending Submissions':   { icon: '📬', accent: '#9a5ab5', bg: 'rgba(154,90,181,0.1)' },
+  'Staff Accounts':        { icon: '👥', accent: '#3d8fa0', bg: 'rgba(61,143,160,0.1)' },
+  'Cash Payments & Receipts': { icon: '💵', accent: '#b55a5a', bg: 'rgba(181,90,90,0.1)' },
+};
+
 const Dashboard = ({ data, scope = 'admin' }) => {
   const base = scope === 'staff' ? '/staff' : '/admin';
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const firstName = (user.name || (scope === 'staff' ? 'Staff' : 'Admin')).split(' ')[0];
+
+  const now = new Date();
+  const hour = now.getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const dateStr = now.toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
   const cards = [
     ['Memorial Records', data?.records ?? 0, `${base}/records`],
     ['Reservations', data?.reservations ?? 0, `${base}/reservations`],
-    ...(scope === 'staff' ? [] : [['User Accounts', data?.users ?? 0, '/admin/users']]),
-    ['Payments to Verify', data?.pending_payments ?? 0, '/payments?tab=review'],
+    ['Pending Reservations', data?.pending_reservations ?? 0, `${base}/reservations`],
+    ['Pending Submissions', data?.pending_submissions ?? 0, `${base}/submissions`],
+    ...(scope === 'staff' ? [] : [['Staff Accounts', data?.users ?? 0, '/admin/users']]),
+    ['Cash Payments & Receipts', data?.pending_payments ?? 0, '/payments'],
   ];
+
+  const quickActions = [
+    { label: 'Add Memorial Record', icon: '➕', to: `${base}/records`, desc: 'Register a new burial record' },
+    { label: 'View Reservations', icon: '📋', to: `${base}/reservations`, desc: 'Manage plot reservations' },
+    { label: 'Record Cash Payment', icon: '💵', to: '/payments', desc: 'Issue official receipts' },
+    { label: 'Cemetery Map', icon: '🗺️', to: '/map', desc: 'View burial plots & sections' },
+    ...(scope !== 'staff' ? [{ label: 'View Reports', icon: '📊', to: `${base}/reports`, desc: 'Collections & analytics' }] : []),
+    ...(scope !== 'staff' ? [{ label: 'Manage Staff', icon: '👥', to: '/admin/users', desc: 'Staff accounts & roles' }] : []),
+  ];
+
   return (
   <>
-    <h1 className="page-title">{scope === 'staff' ? 'Staff Dashboard' : 'Admin Dashboard'}</h1>
-    <p className="admin-provenance-note">
-      Use only cemetery data you are authorized to publish. Every saved record is live cemetery data.
-    </p>
-    <div className="admin-stat-grid">
-      {cards.map(([label, value, to]) => (
-        <Link className="admin-stat-card card" to={to} key={label}>
-          <span>{label}</span><strong>{value}</strong>
+    {/* Welcome Banner */}
+    <div className="dashboard-welcome-banner">
+      <div className="dashboard-welcome-text">
+        <p className="dashboard-greeting">{greeting}, {firstName} 👋</p>
+        <h1 className="dashboard-title">{scope === 'staff' ? 'Staff Dashboard' : 'Admin Dashboard'}</h1>
+        <p className="dashboard-date">{dateStr}</p>
+      </div>
+      <div className="dashboard-welcome-badge">
+        <span>{scope === 'staff' ? '🧑‍💼 Staff Console' : '⚙️ Admin Console'}</span>
+        <p>Cogon Memorial</p>
+      </div>
+    </div>
+
+    {/* Stat Cards */}
+    <div className="dashboard-stat-grid">
+      {cards.map(([label, value, to]) => {
+        const cfg = STAT_CONFIG[label] || { icon: '📌', accent: '#7a5230', bg: 'rgba(122,82,48,0.1)' };
+        return (
+          <Link className="dashboard-stat-card" to={to} key={label}>
+            <div className="dashboard-stat-icon" style={{ background: cfg.bg, color: cfg.accent }}>
+              {cfg.icon}
+            </div>
+            <div className="dashboard-stat-info">
+              <span className="dashboard-stat-label">{label}</span>
+              <strong className="dashboard-stat-value" style={{ color: cfg.accent }}>{value}</strong>
+            </div>
+            <span className="dashboard-stat-arrow">→</span>
+          </Link>
+        );
+      })}
+    </div>
+
+    {/* Quick Actions */}
+    <div className="dashboard-section-title">Quick Actions</div>
+    <div className="dashboard-quick-actions">
+      {quickActions.map((action) => (
+        <Link key={action.label} to={action.to} className="dashboard-action-card">
+          <div className="dashboard-action-icon">{action.icon}</div>
+          <div>
+            <div className="dashboard-action-label">{action.label}</div>
+            <div className="dashboard-action-desc">{action.desc}</div>
+          </div>
         </Link>
       ))}
     </div>
-    <div className="admin-panel card">
-      <h2>Data provenance</h2>
-      <p>{data?.records ?? 0} burial records on file. Every record is live cemetery data.</p>
-      <p>Save a record only after confirming its source and your authorization to publish it.</p>
+
+    {/* Info footer */}
+    <div className="dashboard-info-note">
+      <span>🔒</span>
+      <p>Every saved record is <strong>live cemetery data</strong>. Save a record only after confirming its source and your authorization to publish it.</p>
     </div>
   </>
   );
 };
+
 
 const Records = ({ records, recordForm, setRecordForm, startEditing, saveRecord, saving, api, onUpdated }) => {
   const [deletingId, setDeletingId] = useState(null);
@@ -420,25 +485,38 @@ const Reservations = ({ reservations, onUpdated }) => {
   return (
     <>
       <h1 className="page-title">Reservations</h1>
-      <p className="admin-provenance-note">Plot requests hold an available plot until staff approve or reject them. Approved plots become occupied when a verified burial record is entered.</p>
+      <p className="admin-provenance-note">
+        Plot reservations hold burial spots for the deceased. Payments are collected via Walk-in Cash at the cemetery office, issuing an official receipt and confirming the spot on the map.
+      </p>
       {error && <p className="error-msg" role="alert">{error}</p>}
       {message && <p className="success-msg" role="status">{message}</p>}
       <div className="admin-table-wrap card">
         <table className="admin-table">
-          <thead><tr><th>Visitor</th><th>Reservation</th><th>Date</th><th>Payment</th><th>Status</th><th>Total</th><th>Review</th></tr></thead>
+          <thead><tr><th>Family Representative</th><th>Deceased &amp; Spot</th><th>Date</th><th>Payment</th><th>Status</th><th>Total</th><th>Review</th></tr></thead>
           <tbody>
             {(reservations || []).map((reservation) => {
               const isPlot = reservation.reservation_type === 'plot';
+              const isPaid = reservation.payment_status === 'completed';
               return (
                 <tr key={reservation.id}>
-                  <td>{reservation.visitor_name}<br /><small>{reservation.account_email}</small></td>
-                  <td>{isPlot
-                    ? `${reservation.cemetery_name || 'Cemetery'} · ${reservation.plot_section}-${String(reservation.plot_number).padStart(2, '0')}`
-                    : reservation.memorial_name}</td>
+                  <td>{reservation.visitor_name}<br /><small>{reservation.contact || reservation.account_email}</small></td>
+                  <td>
+                    {reservation.deceased_name && <strong>Deceased: {reservation.deceased_name}<br /></strong>}
+                    {isPlot
+                      ? `${reservation.cemetery_name || 'Cemetery'} · Section ${reservation.plot_section}, Plot ${String(reservation.plot_number).padStart(2, '0')}`
+                      : reservation.memorial_name}
+                  </td>
                   <td>{formatDate(reservation.reservation_date)}</td>
-                  <td>{isPlot ? 'Not required' : reservation.payment_status || 'Not submitted'}</td>
+                  <td>
+                    {isPaid ? (
+                      <span className="admin-status verified">Paid Cash</span>
+                    ) : (
+                      <span className="admin-status pending">Awaiting Cash</span>
+                    )}
+                    {reservation.receipt_no && <><br /><small>OR: {reservation.receipt_no}</small></>}
+                  </td>
                   <td>{reservation.status}</td>
-                  <td>{isPlot ? '—' : `₱${Number(reservation.total_price).toLocaleString()}`}</td>
+                  <td>₱{Number(reservation.total_price || 0).toLocaleString()}</td>
                   <td>{reservation.status === 'pending' ? (
                     <div className="admin-form-actions">
                       {isPlot && (
@@ -446,8 +524,8 @@ const Reservations = ({ reservations, onUpdated }) => {
                           <input
                             type="text"
                             maxLength={500}
-                            placeholder="Note for customer (optional)"
-                            aria-label="Note for customer"
+                            placeholder="Note for family (optional)"
+                            aria-label="Note for family"
                             value={notes[reservation.id] || ''}
                             onChange={(event) => setNotes({ ...notes, [reservation.id]: event.target.value })}
                           />
@@ -471,7 +549,7 @@ const Reservations = ({ reservations, onUpdated }) => {
           </tbody>
         </table>
       </div>
-      <Link className="btn btn-primary" to="/payments?tab=review">Review pending payments</Link>
+      <Link className="btn btn-primary" to="/payments">💵 Manage Cash Payments &amp; Receipts</Link>
     </>
   );
 };
@@ -559,6 +637,11 @@ const Reports = ({ report, scope = 'admin' }) => {
   const [settlementForm, setSettlementForm] = useState({ period_from: '', period_to: '', amount: '', to_account: '', transfer_ref: '' });
   const [settlementSaving, setSettlementSaving] = useState(false);
   const [settlementMessage, setSettlementMessage] = useState('');
+  const [voidingId, setVoidingId] = useState(null);
+  const [receiptQuery, setReceiptQuery] = useState('');
+  const [receiptResults, setReceiptResults] = useState([]);
+  const [receiptError, setReceiptError] = useState('');
+  const [receiptLoading, setReceiptLoading] = useState(false);
 
   const loadCollections = async (from, to) => {
     setCollectionsLoading(true);
@@ -593,6 +676,39 @@ const Reports = ({ report, scope = 'admin' }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const handleVoidSettlement = async (transfer) => {
+    if (!window.confirm(`Void settlement transfer #${transfer.id} (${String(transfer.period_from).slice(0, 10)} to ${String(transfer.period_to).slice(0, 10)})? Its payments return to the cash records.`)) return;
+    setVoidingId(transfer.id);
+    setSettlementsError('');
+    setSettlementMessage('');
+    try {
+      const { data } = await adminAPI.voidSettlement(transfer.id);
+      setSettlements((current) => current.filter((item) => item.id !== transfer.id));
+      setSettlementMessage(`${data.message} (${data.released_count ?? 0} payment(s) released.)`);
+      loadCollections(dateFrom, dateTo);
+    } catch (voidError) {
+      setSettlementsError(voidError.response?.data?.message || 'Could not void this transfer.');
+    } finally {
+      setVoidingId(null);
+    }
+  };
+
+  const handleReceiptSearch = async (event) => {
+    event.preventDefault();
+    setReceiptLoading(true);
+    setReceiptError('');
+    try {
+      const { data } = await adminAPI.searchReceipts(receiptQuery);
+      setReceiptResults(data);
+      if (data.length === 0) setReceiptError('No receipts match that search.');
+    } catch (searchError) {
+      setReceiptError(searchError.response?.data?.message || 'Could not search receipts.');
+      setReceiptResults([]);
+    } finally {
+      setReceiptLoading(false);
+    }
+  };
+
   const handleSettlementSubmit = async (event) => {
     event.preventDefault();
     setSettlementSaving(true);
@@ -609,7 +725,7 @@ const Reports = ({ report, scope = 'admin' }) => {
       }, ...current]);
       setSettlementForm({ period_from: '', period_to: '', amount: '', to_account: '', transfer_ref: '' });
       setSettlementMessage(
-        `Settlement transfer recorded. ${data.covered_count ?? 0} verified payment(s) (₱${Number(data.covered_total ?? 0).toLocaleString()}) moved from the GCash wallet into this transfer.`
+        `Settlement transfer recorded. ${data.covered_count ?? 0} verified payment(s) (₱${Number(data.covered_total ?? 0).toLocaleString()}) moved from the cash records into this transfer.`
       );
       loadCollections(dateFrom, dateTo);
     } catch (saveError) {
@@ -646,8 +762,8 @@ const Reports = ({ report, scope = 'admin' }) => {
         <ul>{byStatus.map((item) => <li key={item.status}>{item.status}: {item.total}</li>)}</ul>
       </section>
       <section className="admin-panel card">
-        <h2>GCash collections (verified payments)</h2>
-        <p className="admin-provenance-note">Money lands in the cemetery GCash wallet off-system; these totals reflect payments staff verified in the app.</p>
+        <h2>Cash Records (verified payments)</h2>
+        <p className="admin-provenance-note">These totals reflect cash payments recorded and verified by staff in the app.</p>
         <form
           className="admin-form-actions"
           onSubmit={(event) => { event.preventDefault(); loadCollections(dateFrom, dateTo); }}
@@ -665,7 +781,7 @@ const Reports = ({ report, scope = 'admin' }) => {
               from {collections?.summary?.count ?? 0} verified payments
               ({String(collections?.from || '').slice(0, 10)} to {String(collections?.to || '').slice(0, 10)}).</p>
             <p><strong>₱{Number(collections?.unremitted?.total ?? 0).toLocaleString()}</strong> from {collections?.unremitted?.count ?? 0} payments
-              still held in the GCash wallet (not yet remitted).</p>
+              still in cash records (not yet remitted).</p>
             {(collections?.daily || []).length > 0 && (
               <ul>{collections.daily.map((day) => <li key={day.day}>{String(day.day).slice(0, 10)}: {day.count} payments · ₱{Number(day.total).toLocaleString()}</li>)}</ul>
             )}
@@ -675,13 +791,61 @@ const Reports = ({ report, scope = 'admin' }) => {
                 <ul>{collections.by_verifier.map((row) => <li key={row.verifier}>{row.verifier}: {row.count} payments · ₱{Number(row.total).toLocaleString()}</li>)}</ul>
               </>
             )}
+            {(collections?.payments || []).length > 0 && (
+              <>
+                <h3>Verified payments in range</h3>
+                <div className="admin-table-wrap card">
+                  <table className="admin-table">
+                    <thead><tr><th>Receipt</th><th>Visitor</th><th>Memorial</th><th>Amount</th><th>Reference</th><th>Verifier</th></tr></thead>
+                    <tbody>
+                      {collections.payments.map((payment) => (
+                        <tr key={payment.id}>
+                          <td>{payment.receipt_no || '—'}</td>
+                          <td>{payment.visitor_name}</td>
+                          <td>{payment.memorial_name || '—'}</td>
+                          <td>₱{Number(payment.amount).toLocaleString()}</td>
+                          <td>{payment.payment_reference}</td>
+                          <td>{payment.verifier}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
           </>
         )}
       </section>
       {isAdmin && (
         <section className="admin-panel card">
-          <h2>Settlement transfers (wallet → treasury)</h2>
-          <p className="admin-provenance-note">Record each transfer of collected GCash money to the bank or treasury account. Movement happens off-system; this log is the audit trail.</p>
+          <h2>Find a receipt</h2>
+          <p className="admin-provenance-note">Search by receipt number, cash reference, visitor, or memorial site — for customers asking for reprints.</p>
+          <form className="admin-form-actions" onSubmit={handleReceiptSearch}>
+            <input
+              type="search"
+              aria-label="Search receipts"
+              placeholder="OR-2026-000001, cash ref, or name..."
+              value={receiptQuery}
+              onChange={(event) => setReceiptQuery(event.target.value)}
+            />
+            <button className="btn btn-outline" type="submit" disabled={receiptLoading}>
+              {receiptLoading ? 'Searching...' : 'Search'}
+            </button>
+          </form>
+          {receiptError && <p className="error-msg" role="alert">{receiptError}</p>}
+          {receiptResults.length > 0 && (
+            <ul>{receiptResults.map((receipt) => (
+              <li key={receipt.receipt_no}>
+                <strong>{receipt.receipt_no}</strong> · {receipt.memorial_name || 'Plot'} · {receipt.visitor_name} ({receipt.account_email}) · ₱{Number(receipt.amount).toLocaleString()} · {receipt.payment_status}
+              </li>
+            ))}</ul>
+          )}
+        </section>
+      )}
+      {isAdmin && (
+        <section className="admin-panel card">
+          <h2>Settlement transfers (cash → treasury)</h2>
+          <p className="admin-provenance-note">Record each transfer of collected cash to the bank or treasury account. Movement happens off-system; this log is the audit trail.</p>
           {settlementMessage && <p className="success-msg" role="status">{settlementMessage}</p>}
           {settlementsError && <p className="error-msg" role="alert">{settlementsError}</p>}
           <form className="admin-form" onSubmit={handleSettlementSubmit}>
@@ -689,7 +853,7 @@ const Reports = ({ report, scope = 'admin' }) => {
             <label>Collection period to<input type="date" required value={settlementForm.period_to} onChange={(event) => setSettlementForm({ ...settlementForm, period_to: event.target.value })} /></label>
             <label>Amount (₱)<input type="number" min="1" step="0.01" required value={settlementForm.amount} onChange={(event) => setSettlementForm({ ...settlementForm, amount: event.target.value })} /></label>
             <label>Destination bank/treasury account<input maxLength="200" required placeholder="e.g. BDO ...1234 — Cemetery Trust" value={settlementForm.to_account} onChange={(event) => setSettlementForm({ ...settlementForm, to_account: event.target.value })} /></label>
-            <label>Transfer reference (optional)<input maxLength="64" placeholder="Bank/GCash transfer ref" value={settlementForm.transfer_ref} onChange={(event) => setSettlementForm({ ...settlementForm, transfer_ref: event.target.value })} /></label>
+            <label>Transfer reference (optional)<input maxLength="64" placeholder="Bank transfer ref" value={settlementForm.transfer_ref} onChange={(event) => setSettlementForm({ ...settlementForm, transfer_ref: event.target.value })} /></label>
             <div className="admin-form-actions">
               <button className="btn btn-primary" type="submit" disabled={settlementSaving}>{settlementSaving ? 'Recording...' : 'Record Transfer'}</button>
             </div>
@@ -702,6 +866,9 @@ const Reports = ({ report, scope = 'admin' }) => {
                   {String(transfer.period_from).slice(0, 10)} to {String(transfer.period_to).slice(0, 10)} · ₱{Number(transfer.amount).toLocaleString()} → {transfer.to_account}
                   {transfer.transfer_ref ? ` · Ref ${transfer.transfer_ref}` : ''} · by {transfer.transferred_by_name || 'staff'}
                   <br /><small>Covers {transfer.covered_count ?? 0} verified payment(s) · ₱{Number(transfer.covered_total ?? 0).toLocaleString()}</small>
+                  {' '}<button type="button" className="btn btn-outline" disabled={voidingId === transfer.id} onClick={() => handleVoidSettlement(transfer)}>
+                    {voidingId === transfer.id ? 'Voiding...' : 'Void'}
+                  </button>
                 </li>
               ))}</ul>
             )}
@@ -787,7 +954,7 @@ const Users = ({ users, onCreated }) => {
         <button className="btn btn-primary" type="button" onClick={() => setShowModal(true)}>Add User</button>
       </div>
       <p className="admin-provenance-note">
-        Account details are visible only to administrators. Create staff or administrator accounts here; public user accounts are created through registration.
+        Account details are visible only to administrators. Create staff or administrator accounts here.
       </p>
       {error && <p className="error-msg" role="alert">{error}</p>}
       <div className="admin-table-wrap card">
@@ -807,7 +974,6 @@ const Users = ({ users, onCreated }) => {
                       disabled={isSelf || busy}
                       onChange={(e) => changeRole(account, e.target.value)}
                     >
-                      <option value="user">Customer</option>
                       <option value="staff">Staff</option>
                       <option value="admin">Administrator</option>
                     </select>

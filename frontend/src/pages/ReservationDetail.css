@@ -27,6 +27,24 @@
   margin-top: 18px;
 }
 
+.reservation-policy-note {
+  margin-top: 20px;
+  background: #f8fafc;
+  border-left: 4px solid var(--primary, #2563eb);
+  padding: 14px;
+  border-radius: 6px;
+  font-size: 0.88rem;
+  color: #475569;
+  line-height: 1.6;
+}
+
+.form-help {
+  display: block;
+  font-size: 0.8rem;
+  color: #64748b;
+  margin-top: 4px;
+}
+
 .reservation-form {
   padding: 32px;
 }
@@ -34,6 +52,12 @@
 .reservation-form h3 {
   color: var(--secondary);
   margin-bottom: 24px;
+}
+
+.reservations-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
 }
 
 .reservations-list {
@@ -57,6 +81,30 @@
   height: 120px;
   object-fit: cover;
   border-radius: 18px;
+}
+
+.reservation-item-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.deceased-name-row {
+  font-size: 1.05rem;
+  color: var(--secondary, #0f172a);
+}
+
+.paid-text {
+  color: #166534;
+  font-weight: 600;
+}
+
+.reservation-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
 }
 
 .reservation-item h3 {
@@ -83,7 +131,8 @@
 .empty-state {
   color: var(--text-muted);
   font-size: 1rem;
-  padding: 24px;
+  padding: 36px;
+  text-align: center;
 }
 
 @media (max-width: 900px) {
@@ -98,11 +147,11 @@
   }
 
   .reservation-item img {
-    height: 180px;
+    height: 160px;
   }
 
-  .reservation-form,
-  .reservation-info-body {
-    padding: 20px;
+  .reservation-item-actions {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
