@@ -247,7 +247,7 @@ const resetPassword = async (req, res) => {
     }
 
     const resetResult = await client.query(
-      `SELECT id, code_hash, attempts, expires_at
+      `SELECT id, code_hash, attempts, (expires_at > CURRENT_TIMESTAMP) AS is_valid
        FROM password_reset_codes
        WHERE user_id = $1 AND used_at IS NULL
        ORDER BY created_at DESC, id DESC
@@ -255,7 +255,7 @@ const resetPassword = async (req, res) => {
       [account.id]
     );
     const reset = resetResult.rows[0];
-    if (!reset || Number(reset.attempts) >= 5 || new Date(reset.expires_at).getTime() <= Date.now()) {
+    if (!reset || Number(reset.attempts) >= 5 || !reset.is_valid) {
       if (reset) {
         await client.query('UPDATE password_reset_codes SET used_at = CURRENT_TIMESTAMP WHERE id = $1', [reset.id]);
       }
