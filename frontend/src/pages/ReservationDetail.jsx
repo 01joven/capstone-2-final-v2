@@ -323,7 +323,7 @@ const ReservationsList = () => {
                         💵 Record Cash Payment
                       </Link>
                     )}
-                    {r.status === 'pending' && (
+                    {(r.status === 'pending' || r.status === 'approved') && (
                       <button
                         type="button"
                         className="btn btn-outline"

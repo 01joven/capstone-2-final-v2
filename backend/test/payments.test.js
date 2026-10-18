@@ -185,3 +185,56 @@ test('receipt access is limited to the owner unless the caller is privileged', a
 test('the legacy direct-completion payment handler is no longer exported', () => {
   assert.equal(paymentController.createPayment, undefined);
 });
+
+test('a receipt cannot be issued for a payment that is not completed', async () => {
+  const reservationId = await insertReservation(ownerId, cemeteryId, 7, 'pending');
+  const paymentId = await insertPayment(reservationId, 'rejected', 'RECEIPT-VOID');
+
+  const res = createResponse();
+  await paymentController.getPaymentReceipt(
+    { user: { id: ownerId, role: 'visitor' }, params: { id: String(paymentId) } },
+    res
+  );
+
+  assert.equal(res.statusCode, 409);
+  assert.match(res.payload.message, /completed cash payments/i);
+  assert.equal(await receiptCount(paymentId), 0, 'a rejected payment must never produce a receipt');
+});
+
+test('recording cash rejects zero and underpaid amounts unless a note explains the reduction', async () => {
+  const zeroId = await insertReservation(ownerId, cemeteryId, 8, 'pending');
+  const zeroRes = createResponse();
+  await paymentController.recordCashPayment(
+    { user: { id: reviewerId, role: 'staff' }, body: { reservation_id: zeroId, amount: 0 } },
+    zeroRes
+  );
+  assert.equal(zeroRes.statusCode, 400);
+  assert.match(zeroRes.payload.message, /positive cash amount/i);
+  const zeroPayments = await db.query('SELECT id FROM payments WHERE reservation_id = $1', [zeroId]);
+  assert.equal(zeroPayments.rows.length, 0, 'a zero-amount recording must not create a payment');
+
+  const underpayId = await insertReservation(ownerId, cemeteryId, 9, 'pending');
+  const underpayRes = createResponse();
+  await paymentController.recordCashPayment(
+    { user: { id: reviewerId, role: 'staff' }, body: { reservation_id: underpayId, amount: 100 } },
+    underpayRes
+  );
+  assert.equal(underpayRes.statusCode, 400);
+  assert.match(underpayRes.payload.message, /below the reservation fee/i);
+  const underpayPayments = await db.query('SELECT id FROM payments WHERE reservation_id = $1', [underpayId]);
+  assert.equal(underpayPayments.rows.length, 0, 'a silent underpayment must not create a payment');
+
+  const notedRes = createResponse();
+  await paymentController.recordCashPayment(
+    {
+      user: { id: reviewerId, role: 'staff' },
+      body: { reservation_id: underpayId, amount: 100, note: 'Reduced fee approved at the office.' },
+    },
+    notedRes
+  );
+  assert.equal(notedRes.statusCode, 201, 'a noted reduction is an explicit, audited adjustment');
+  const confirmed = await db.query('SELECT status FROM reservations WHERE id = $1', [underpayId]);
+  assert.equal(confirmed.rows[0].status, 'confirmed');
+  const recorded = await db.query('SELECT admin_note FROM payments WHERE reservation_id = $1', [underpayId]);
+  assert.match(recorded.rows[0].admin_note, /Reduced fee approved/);
+});

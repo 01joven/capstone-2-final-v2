@@ -96,6 +96,24 @@ const recordCashPayment = async (req, res) => {
       return res.status(409).json({ message: 'This reservation already has a completed cash payment.' });
     }
 
+    // Money integrity: a positive amount is required, and recording less than
+    // the reservation's quoted fee must be an explicit, noted adjustment —
+    // never a silent underpayment. The note is stored in admin_note and shown
+    // in payment history, so reduced receipts carry their justification.
+    const totalDue = Number(reservation.total_price) || 0;
+    if (totalDue > 0 && amount <= 0) {
+      await client.query('ROLLBACK');
+      transactionStarted = false;
+      return res.status(400).json({ message: 'Enter a positive cash amount.' });
+    }
+    if (amount < totalDue && !note) {
+      await client.query('ROLLBACK');
+      transactionStarted = false;
+      return res.status(400).json({
+        message: `Cash amount (₱${amount.toLocaleString()}) is below the reservation fee (₱${totalDue.toLocaleString()}). Record the full fee, or add a note explaining the reduction.`,
+      });
+    }
+
     const cashRef = `CASH-${Date.now().toString().slice(-6)}`;
     const paymentResult = await client.query(
       `INSERT INTO payments (reservation_id, amount, payment_method, payment_reference, payment_status, verified_by, verified_at, admin_note)
@@ -166,6 +184,11 @@ const getPaymentReceipt = async (req, res) => {
     const isPrivileged = req.user.role === 'staff' || req.user.role === 'admin';
     if (!isPrivileged && Number(payment.user_id) !== Number(req.user.id)) {
       return res.status(403).json({ message: 'You do not have access to this receipt.' });
+    }
+    // Receipts exist only for completed cash payments. A rejected or awaiting
+    // payment must never yield a printable receipt number.
+    if (payment.payment_status !== 'completed') {
+      return res.status(409).json({ message: 'A receipt is only available for completed cash payments.' });
     }
     const receipt = await ensureReceipt(pool, paymentId, payment.verified_by || req.user.id);
     res.json({

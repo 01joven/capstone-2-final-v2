@@ -20,6 +20,13 @@ const MemorialRecord = () => {
 
   const loadRecord = useCallback(async () => {
     setError('');
+    // Route ids are record numbers; guard before querying so a garbage id
+    // shows a clear "not found" instead of a misleading search failure.
+    if (!/^\d+$/.test(String(id))) {
+      setError('No memorial record was found for this ID.');
+      setLoading(false);
+      return;
+    }
     try {
       const { data } = user
         ? await burialAPI.getAll({

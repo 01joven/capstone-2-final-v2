@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { escapeLikePattern } = require('../services/searchQuery');
 
 const getAllMemorials = async (req, res) => {
   try {
@@ -8,8 +9,10 @@ const getAllMemorials = async (req, res) => {
     let paramCount = 1;
 
     if (search) {
+      // Escape LIKE wildcards so searching for "50%" does not match everything
+      // (mirrors the escaping the burial search already applies).
       query += ` AND (name ILIKE $${paramCount} OR description ILIKE $${paramCount})`;
-      values.push(`%${search}%`);
+      values.push(`%${escapeLikePattern(search)}%`);
       paramCount++;
     }
 
