@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Backend tests
+        run: npm test --workspace=memorial-map-backend
+
+      - name: Frontend build
+        run: npm run build --workspace=memorial-map-frontend
+
+      # Production dependencies only: a high or critical advisory fails the build.
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high

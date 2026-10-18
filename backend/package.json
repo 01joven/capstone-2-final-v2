@@ -16,7 +16,7 @@
     "admin:change-email": "node database/changeAdminEmail.js",
     "admin:reset-password": "node database/resetAdminPassword.js",
     "admin:seed": "node database/seedAdmin.js",
-    "test": "node --test test/security.test.js"
+    "test": "node --test"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",

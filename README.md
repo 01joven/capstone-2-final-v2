@@ -27,7 +27,7 @@ User registration no longer requires email verification. Account creation is adm
 
 Configure Resend with `RESEND_API_KEY` and `RESEND_FROM_EMAIL` in `backend/.env` to enable email delivery. This is required for self-service password resets. Set `CORS_ORIGINS` to the frontend origin(s) allowed to call the API. Create an API key at https://resend.com/api-keys and verify a sending domain. If reset email delivery is unavailable, an administrator can use the operator reset command below.
 
-If an existing user account needs administrator access, stop the local app and run `npm run admin:promote -- your-admin-email@example.com` from the project root, then restart and sign in again. For Neon, you can instead run `UPDATE users SET role = 'admin' WHERE email = 'your-admin-email@example.com';` in the database console. Promote only trusted administrator accounts. Customers submit the GCash transaction reference after scanning the static InstaPay QR; reservations remain pending until a staff member checks the payment and approves it in Payments. The QR does not send automatic payment confirmations.
+If an existing user account needs administrator access, stop the local app and run `npm run admin:promote -- your-admin-email@example.com` from the project root, then restart and sign in again. For Neon, you can instead run `UPDATE users SET role = 'admin' WHERE email = 'your-admin-email@example.com';` in the database console. Promote only trusted administrator accounts. Payment is Cash (walk-in) recorded by staff in Payments; the static InstaPay QR is shown for reference and does not send automatic payment confirmations.
 
 Authenticated users (staff or administrator) can reset their password from their login screens using a six-digit code sent to the registered email. Codes expire after 10 minutes, allow at most five attempts each, and accounts are limited to one request per minute and five per hour. After 10 failed attempts within an hour, the account must wait before trying again. Codes are stored as keyed HMACs, not plain hashes. Password resets, password changes, and sign-outs revoke existing sessions. Administrator passwords must be at least 12 characters. To change an administrator email, run `npm run admin:change-email -- old-admin@example.com new-admin@example.com --verified-authorized`. As a recovery fallback, run `npm run admin:reset-password -- admin@example.com --verified-authorized` and enter the new password in the private terminal prompt.
 
@@ -72,7 +72,7 @@ To grant staff access to an existing registered account instead, stop the app an
 npm run staff:promote -- staff@example.com
 ```
 
-Sign-in pages: staff at `/staff/login`, administrators at `/admin/login`. Staff manage memorial records, memorial sites, reservations, reports, collections, and payment verification, but cannot access User Management; that stays administrator-only. Administrators can create staff or administrator accounts in User Management and change roles, deactivate, or delete accounts there (never their own, and never the last administrator). There is no public registration. Administrator credential recovery and email changes are performed by a trusted operator, not from self-service account screens.
+Sign-in pages: staff at `/staff/login`, administrators at `/admin/login`. Staff manage memorial records, memorial sites, reservations, reports, collections, and cash payment recording, but cannot access User Management; that stays administrator-only. Administrators can create staff or administrator accounts in User Management and change roles, deactivate, or delete accounts there (never their own, and never the last administrator). There is no public registration. Administrator credential recovery and email changes are performed by a trusted operator, not from self-service account screens.
 
 Start the backend and frontend together:
 
@@ -92,11 +92,11 @@ The backend checks its configuration, database connection, and required tables b
 
 ## User and administrator flows
 
-Authenticated users (staff or administrator) can use Home, Search, Memorial Record, Map, Reservations, Saved Memorials, Submit Memorial, and Profile. Staff manage memorial records, memorial sites, reservations, reports, and payment verification, including reviewing plot requests. Staff sign in at `/staff/login` and work in the Staff Console: Dashboard, Memorial Records, Cemetery Map/Plots, Reservations, Reports, and payment verification, including reviewing plot requests. Administrators use `/admin/login` for the same operational screens plus User Management. Administrators can create staff and administrator accounts in User Management and change roles, deactivate, or delete accounts there (never their own, and never the last administrator). There is no public registration. Administrator credential recovery and email changes are performed by a trusted operator, not from self-service account screens.
+Authenticated users (staff or administrator) can use Home, Search, Memorial Record, Map, Reservations, Saved Memorials, Submit Memorial, and Profile. Staff manage memorial records, memorial sites, reservations, reports, and cash payment recording, including reviewing plot requests. Staff sign in at `/staff/login` and work in the Staff Console: Dashboard, Memorial Records, Cemetery Map/Plots, Reservations, Reports, and cash payment recording, including reviewing plot requests. Administrators use `/admin/login` for the same operational screens plus User Management. Administrators can create staff and administrator accounts in User Management and change roles, deactivate, or delete accounts there (never their own, and never the last administrator). There is no public registration. Administrator credential recovery and email changes are performed by a trusted operator, not from self-service account screens.
 
 New burial records are always real data. Saving a record requires confirming verification and publication authorization in the record form.
 
-Authenticated pages refresh shared records, reservations, plot availability, payment reviews, saved memorials, and dashboard totals every 10 seconds while visible. Returning to a browser tab refreshes immediately. This is near-real-time polling, not instant push notifications; users need an active connection to the same running backend to see updates.
+Authenticated pages refresh shared records, reservations, plot availability, payment records, saved memorials, and dashboard totals every 10 seconds while visible. Returning to a browser tab refreshes immediately. This is near-real-time polling, not instant push notifications; users need an active connection to the same running backend to see updates.
 
 ## API
 
@@ -124,10 +124,8 @@ Authenticated pages refresh shared records, reservations, plot availability, pay
 | POST | `/api/favorites/add` | Save a memorial |
 | DELETE | `/api/favorites/remove/:saved_id` | Remove a saved memorial by `saved_id` (returned as `saved_id` by `GET /api/favorites`) |
 | GET | `/api/payments` | List payment history |
-| POST | `/api/payments/create` | Submit a GCash reference for verification |
-| GET | `/api/payments/:id/receipt` | Official receipt for a verified payment (owner, staff, or admin) |
-| GET | `/api/payments/admin/pending` | List GCash payments awaiting verification (staff or admin) |
-| POST | `/api/payments/admin/:id/verify` | Approve or reject a submitted payment reference with optional `{ "note" }` (staff or admin); approval issues an official receipt and emails the customer if Resend is configured |
+| GET | `/api/payments/:id/receipt` | Official receipt for a recorded cash payment (owner, staff, or admin) |
+| POST | `/api/payments/record-cash` | Record a walk-in cash payment, confirm the reservation, and issue the receipt (staff or admin) |
 | GET | `/api/admin/dashboard` | Administrator dashboard counts |
 | GET | `/api/admin/records` | List cemetery memorial records (admin only) |
 | POST | `/api/admin/records` | Create a cemetery memorial record (admin only) |
@@ -138,9 +136,9 @@ Authenticated pages refresh shared records, reservations, plot availability, pay
 | PUT | `/api/admin/sites/:id` | Update a memorial site (admin only) |
 | GET | `/api/admin/reservations` | List all reservations (admin only) |
 | GET | `/api/admin/reports` | Reservation totals and monthly summaries (admin only) |
-| GET | `/api/admin/collections?from=YYYY-MM-DD&to=YYYY-MM-DD` | Verified GCash collections by day and verifier (admin only) |
-| GET | `/api/admin/settlements` | List wallet-to-treasury settlement transfers (admin only) |
-| POST | `/api/admin/settlements` | Record a wallet-to-treasury settlement transfer (admin only) |
+| GET | `/api/admin/collections?from=YYYY-MM-DD&to=YYYY-MM-DD` | Recorded cash collections by day and recorder (admin only) |
+| GET | `/api/admin/settlements` | List collections-to-treasury settlement transfers (admin only) |
+| POST | `/api/admin/settlements` | Record a collections-to-treasury settlement transfer (admin only) |
 | GET | `/api/admin/users` | List user accounts and usage counts (admin only) |
 | POST | `/api/admin/users` | Create a staff or administrator account (admin only) |
 | PUT | `/api/admin/users/:id/role` | Change an account role (admin only, not self) |
@@ -156,13 +154,13 @@ Authenticated pages refresh shared records, reservations, plot availability, pay
 | PUT | `/api/staff/sites/:id` | Update a memorial site (staff or admin) |
 | GET | `/api/staff/reservations` | List all reservations (staff or admin) |
 | GET | `/api/staff/reports` | Reservation totals and monthly summaries (staff or admin) |
-| GET | `/api/staff/collections?from=YYYY-MM-DD&to=YYYY-MM-DD` | Verified GCash collections by day and verifier (staff or admin) |
+| GET | `/api/staff/collections?from=YYYY-MM-DD&to=YYYY-MM-DD` | Recorded cash collections by day and recorder (staff or admin) |
 
 The Memorial Sites view includes an interactive OpenStreetMap centered on the Cogon cemetery location, the supplied Cogon/Cordova map as an optional reference, a separate interactive view of saved memorial-site coordinates, and an Add Reservation action for each site. The cemetery pin uses the mapped Cordova Catholic Cemetery location in Cogon; the memorial-site coordinates are shown separately in Site Pins. The four supplied cemetery photos are stored in `frontend/public/cemetery-images` and assigned to the Heritage, Peaceful Gardens, Riverside, and Sunset memorial records in the database seed.
 
 Login and registration use a responsive split-panel layout over the supplied Cogon cemetery photo. The original memorial logo is reused in the authentication header, landing page, and application sidebar.
 
-The GCash checkout displays the supplied static InstaPay QR and collects the GCash transaction reference for manual staff verification; it does not log into GCash or automatically detect transfers. Memorial-site reservations are confirmed after an authorized staff member or administrator verifies and approves the submitted reference. Approving a payment automatically issues an official receipt (`OR-YYYY-000001`) that the customer can view and print from Payments. Verified money stays in the cemetery GCash wallet (`Held in GCash wallet` on each payment) until an administrator records a settlement transfer to the bank/treasury account; recording a transfer atomically attaches every verified-but-unremitted payment in its period, so each payment shows exactly where it is: wallet or remitted. Collections in Reports show verified totals plus the still-unremitted wallet balance. Customers can also choose a vacant plot from the schematic cemetery map and submit a no-payment request for staff review. Pending and approved requests hold that plot on the map; rejected requests release it. Once staff enter a verified burial record for an approved plot, the map marks it occupied. Plot selection is based on a grave record's `grave_reference` when it is in section/lot form (for example, `A-03`). Records without a grave reference are listed separately, so staff should enter the real grave reference for every record.
+Payments are Cash (walk-in) only: a staff member or administrator records the payment in Payments, which confirms the reservation and issues the official receipt (`OR-YYYY-000001`) automatically for the customer to view and print. No online payment integration is used: nothing is transferred, detected, or reconciled automatically. Recorded cash stays in the unremitted balance until an administrator records a settlement transfer to the bank/treasury account; recording a transfer attaches every recorded-but-unremitted payment in its period in one transaction, so each payment shows exactly where it is: unremitted or settled. Collections in Reports show recorded totals plus the still-unremitted balance. Customers can also choose a vacant plot from the schematic cemetery map and submit a no-payment request for staff review. Pending and approved requests hold that plot on the map; rejected requests release it. Once staff enter a verified burial record for an approved plot, the map marks it occupied. Plot selection is based on a grave record's `grave_reference` when it is in section/lot form (for example, `A-03`). Records without a grave reference are listed separately, so staff should enter the real grave reference for every record.
 
 Authenticated endpoints require `Authorization: Bearer <token>`.
 
