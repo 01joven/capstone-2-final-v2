@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { adminAPI, reservationAPI, staffAPI, submissionAPI } from '../services/api';
@@ -18,6 +18,29 @@ const formatDate = (date) => {
   if (!date) return '—';
   const parsed = new Date(`${String(date).slice(0, 10)}T00:00:00`);
   return Number.isNaN(parsed.getTime()) ? '—' : parsed.toLocaleDateString();
+};
+
+// Display identifier used across the records view, delete confirmations and dialogs.
+const mrLabel = (record) => `MR-${String(record.id).padStart(4, '0')}`;
+
+// Keep focus cycling inside an open dialog (Tab / Shift+Tab wrap at its edges).
+const trapTabKey = (event, dialog) => {
+  if (event.key !== 'Tab' || !dialog) return;
+  const focusable = dialog.querySelectorAll(
+    'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  );
+  if (focusable.length === 0) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey) {
+    if (document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    }
+  } else if (document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 };
 
 const AdminPortal = ({ scope = 'admin' }) => {
@@ -259,12 +282,124 @@ const Dashboard = ({ data, scope = 'admin' }) => {
 };
 
 
+// Read-only detail dialog for one memorial record. Reuses the shared
+// .modal-overlay / .modal primitives (same as the Add User dialog).
+const RecordDetailModal = ({ record, onClose, returnFocusRef }) => {
+  const dialogRef = useRef(null);
+
+  // Move focus into the dialog on open and restore it to the triggering
+  // button on close. The Escape listener only exists while this dialog is
+  // open, so the rest of the page's keyboard behaviour is untouched otherwise.
+  useEffect(() => {
+    if (dialogRef.current) dialogRef.current.focus();
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      const trigger = returnFocusRef && returnFocusRef.current;
+      if (trigger && typeof trigger.focus === 'function') trigger.focus();
+    };
+  }, [onClose]);
+
+  const location = [record.barangay, record.municipality, record.province].filter(Boolean).join(', ');
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div
+        ref={dialogRef}
+        className="modal modal-record"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="record-detail-title"
+        tabIndex={-1}
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => trapTabKey(event, dialogRef.current)}
+      >
+        <div className="modal-record-header">
+          <div>
+            <p className="modal-record-id">{mrLabel(record)}</p>
+            <h2 id="record-detail-title">{record.full_name || 'Unnamed record'}</h2>
+          </div>
+          <span className="admin-status verified">Verified</span>
+        </div>
+
+        <section className="modal-record-group">
+          <h3 className="modal-record-group-title">Burial place</h3>
+          <dl className="modal-record-list">
+            <div className="modal-record-field">
+              <dt>Cemetery</dt>
+              <dd>{record.cemetery_name || 'Not recorded'}</dd>
+            </div>
+            <div className="modal-record-field">
+              <dt>Location</dt>
+              <dd>{location || 'Not recorded'}</dd>
+            </div>
+            <div className="modal-record-field">
+              <dt>Grave reference</dt>
+              <dd>{record.grave_reference || 'Unassigned'}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section className="modal-record-group">
+          <h3 className="modal-record-group-title">Recorded dates</h3>
+          <dl className="modal-record-list">
+            <div className="modal-record-field">
+              <dt>Date of birth</dt>
+              <dd>{formatDate(record.birth_date)}</dd>
+            </div>
+            <div className="modal-record-field">
+              <dt>Date of death</dt>
+              <dd>{formatDate(record.death_date)}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <div className="modal-record-group">
+          <h3 className="modal-record-group-title">Epitaph</h3>
+          {record.epitaph ? (
+            <blockquote className="modal-record-quote">
+              <p>&ldquo;{record.epitaph}&rdquo;</p>
+            </blockquote>
+          ) : (
+            <p className="modal-record-empty">Not recorded</p>
+          )}
+        </div>
+
+        <p className="admin-provenance-note">
+          Every saved record is live cemetery data. Save a record only after confirming its source and your authorization.
+        </p>
+
+        <div className="admin-form-actions">
+          <button className="btn btn-outline" type="button" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
 const Records = ({ records, recordForm, setRecordForm, startEditing, saveRecord, saving, api, onUpdated }) => {
   const [deletingId, setDeletingId] = useState(null);
   const [deleteError, setDeleteError] = useState('');
+  const [viewingRecord, setViewingRecord] = useState(null);
+  const viewTriggerRef = useRef(null);
+
+  const openView = (record, event) => {
+    viewTriggerRef.current = event.currentTarget;
+    setViewingRecord(record);
+  };
+
+  const closeView = useCallback(() => setViewingRecord(null), []);
+
+  // Show the row's live data in the dialog: re-resolve against the latest
+  // fetched records, and close automatically if the record no longer exists.
+  const viewedRecord = viewingRecord ? (records || []).find((item) => item.id === viewingRecord.id) || null : null;
 
   const deleteEntry = async (record) => {
-    if (!window.confirm(`Delete memorial record MR-${String(record.id).padStart(4, '0')} (${record.full_name})? This cannot be undone.`)) return;
+    if (!window.confirm(`Delete memorial record ${mrLabel(record)} (${record.full_name})? This cannot be undone.`)) return;
     setDeletingId(record.id);
     setDeleteError('');
     try {
@@ -307,13 +442,21 @@ const Records = ({ records, recordForm, setRecordForm, startEditing, saveRecord,
         <tbody>
           {(records || []).map((record) => (
             <tr key={record.id}>
-              <td>MR-{String(record.id).padStart(4, '0')}<br />{record.full_name}</td>
+              <td>{mrLabel(record)}<br />{record.full_name}</td>
               <td>{record.cemetery_name}</td>
               <td>{record.grave_reference || 'Unassigned'}</td>
               <td>Born: {formatDate(record.birth_date)}<br />Died: {formatDate(record.death_date)}</td>
               <td><span className="admin-status verified">Verified</span></td>
               <td>
-                <div className="admin-form-actions">
+                <div className="admin-form-actions admin-row-actions">
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    aria-label={`View ${record.full_name || 'record'} (${mrLabel(record)})`}
+                    onClick={(event) => openView(record, event)}
+                  >
+                    View
+                  </button>
                   <button type="button" className="btn btn-outline" onClick={() => startEditing(record)}>Edit</button>
                   <button type="button" className="btn btn-outline" disabled={deletingId === record.id} onClick={() => deleteEntry(record)}>
                     {deletingId === record.id ? 'Deleting...' : 'Delete'}
@@ -326,6 +469,9 @@ const Records = ({ records, recordForm, setRecordForm, startEditing, saveRecord,
         </tbody>
       </table>
     </div>
+    {viewedRecord && (
+      <RecordDetailModal record={viewedRecord} onClose={closeView} returnFocusRef={viewTriggerRef} />
+    )}
   </>
   );
 };

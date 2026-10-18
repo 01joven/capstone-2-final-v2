@@ -537,3 +537,128 @@
   justify-content: space-between;
   gap: 16px;
 }
+
+/* ===== MEMORIAL RECORD DETAIL (read-only View dialog) ===== */
+.modal-record {
+  max-width: 560px;
+}
+
+/* Programmatic focus lands on the dialog container on open; visible focus
+   stays with the Close button as the user tabs inside. */
+.modal-record:focus {
+  outline: none;
+}
+
+.modal-record-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.modal-record-header h2 {
+  margin-bottom: 0;
+  line-height: 1.25;
+}
+
+.modal-record-id {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin: 0 0 4px;
+}
+
+.modal-record-header .admin-status {
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+.modal-record-group {
+  margin-bottom: 18px;
+}
+
+.modal-record-group-title {
+  color: var(--secondary);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 0 0 6px;
+}
+
+.modal-record-list {
+  margin: 0;
+}
+
+.modal-record-field {
+  display: grid;
+  grid-template-columns: minmax(110px, 150px) 1fr;
+  gap: 4px 16px;
+  align-items: baseline;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.modal-record-field:last-child {
+  border-bottom: none;
+}
+
+.modal-record-field dt {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.modal-record-field dd {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.95rem;
+  overflow-wrap: anywhere;
+}
+
+.modal-record-quote {
+  margin: 0;
+  padding: 12px 16px;
+  border-left: 3px solid var(--accent);
+  background: var(--surface-soft);
+  border-radius: 0 12px 12px 0;
+  color: var(--secondary);
+}
+
+.modal-record-quote p {
+  margin: 0;
+  font-style: italic;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.modal-record-empty {
+  margin: 0;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Row action buttons inside tables: compact so a View / Edit / Delete group
+   stays on one line, with the table wrap's own horizontal scroll handling
+   narrow screens instead of awkward cell wrapping. */
+.admin-row-actions {
+  flex-wrap: nowrap;
+}
+
+.admin-row-actions .btn {
+  padding: 8px 14px;
+  font-size: 0.84rem;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .modal-record-field {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}
