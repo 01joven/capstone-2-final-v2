@@ -208,12 +208,16 @@ const reviewPlotReservation = async (req, res) => {
       'SELECT cemetery_id FROM reservations WHERE id = $1',
       [reservationId]
     );
-    if (!reservationSnapshot.rows[0]?.cemetery_id) {
+    if (!reservationSnapshot.rows[0]) {
       await client.query('ROLLBACK');
       transactionStarted = false;
-      return res.status(404).json({ message: 'Plot reservation not found.' });
+      return res.status(404).json({ message: 'Reservation not found.' });
     }
-    await client.query('SELECT id FROM cemeteries WHERE id = $1 FOR UPDATE', [reservationSnapshot.rows[0].cemetery_id]);
+    // Memorial-site (non-plot) reservations carry no cemetery/plot: those
+    // locks only apply to plot requests. Both types are reviewable.
+    if (reservationSnapshot.rows[0].cemetery_id) {
+      await client.query('SELECT id FROM cemeteries WHERE id = $1 FOR UPDATE', [reservationSnapshot.rows[0].cemetery_id]);
+    }
 
     const reservationResult = await client.query(
       `SELECT id, cemetery_id, plot_section, plot_number, status
@@ -221,18 +225,20 @@ const reviewPlotReservation = async (req, res) => {
       [reservationId]
     );
     const reservation = reservationResult.rows[0];
-    if (!reservation || !reservation.plot_section) {
+    if (!reservation) {
       await client.query('ROLLBACK');
       transactionStarted = false;
-      return res.status(404).json({ message: 'Plot reservation not found.' });
+      return res.status(404).json({ message: 'Reservation not found.' });
     }
     if (reservation.status !== 'pending') {
       await client.query('ROLLBACK');
       transactionStarted = false;
-      return res.status(409).json({ message: 'This plot request has already been reviewed.' });
+      return res.status(409).json({ message: 'This reservation has already been reviewed.' });
     }
 
-    if (action === 'approve') {
+    // Occupancy only matters for plot requests; memorial-site bookings have
+    // no plot to occupy.
+    if (action === 'approve' && reservation.plot_section && reservation.cemetery_id) {
       if (await isBurialPlotOccupied(
         client,
         reservation.cemetery_id,
@@ -265,19 +271,23 @@ const reviewPlotReservation = async (req, res) => {
     transactionStarted = false;
     const account = notified.rows[0];
     if (account?.email) {
+      const subjectNoun = reservation.plot_section ? 'plot request' : 'reservation';
+      const bodySubject = reservation.plot_section ? 'cemetery plot request' : 'reservation';
       notifyAccount(
         account.email,
-        action === 'approve' ? 'Your plot request was approved' : 'Your plot request was not approved',
+        action === 'approve' ? `Your ${subjectNoun} was approved` : `Your ${subjectNoun} was not approved`,
         `Hello ${account.name || account.visitor_name},\n\n` +
         (action === 'approve'
-          ? 'Your cemetery plot request has been approved by our staff. It is awaiting cash payment: visit the office to pay, and the reservation will be confirmed once the payment is recorded.'
-          : 'Your cemetery plot request was reviewed and could not be approved at this time.') +
+          ? `Your ${bodySubject} has been approved by our staff. It is awaiting cash payment: visit the office to pay, and the reservation will be confirmed once the payment is recorded.`
+          : `Your ${bodySubject} was reviewed and could not be approved at this time.`) +
         (note ? `\n\nNote from staff: ${note}` : '') +
         '\n\nThank you.'
       );
     }
     return res.json({
-      message: action === 'approve' ? 'Plot reservation approved — awaiting cash payment.' : 'Plot reservation rejected.',
+      message: action === 'approve'
+        ? `${reservation.plot_section ? 'Plot reservation' : 'Reservation'} approved — awaiting cash payment.`
+        : `${reservation.plot_section ? 'Plot reservation' : 'Reservation'} rejected.`,
       status,
     });
   } catch (error) {

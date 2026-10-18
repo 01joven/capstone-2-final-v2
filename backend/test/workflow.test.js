@@ -344,6 +344,33 @@ test('the direct record-creation endpoints and controller function were removed'
   }
 });
 
+test('a memorial-site reservation can be reviewed, paid, and confirmed', async () => {
+  const memorial = await db.query(
+    `INSERT INTO memorials (name, description, latitude, longitude, category, image_url, price)
+     VALUES ('Workflow Memorial Site', 'Review test site.', 10.2601, 123.9511, 'Cemetery', '/cemetery-images/heritage-memorial.png', 500)
+     RETURNING id`
+  );
+  const inserted = await db.query(
+    `INSERT INTO reservations (user_id, memorial_id, deceased_name, visitor_name, contact, reservation_date, status, total_price)
+     VALUES ($1, $2, 'Memorial Person', 'Test Visitor', '09170000000', CURRENT_DATE, 'pending', 500)
+     RETURNING id`,
+    [customerId, memorial.rows[0].id]
+  );
+  const reservationId = inserted.rows[0].id;
+
+  // Memorial-site (non-plot) reservations must be reviewable too: the old
+  // endpoint 404'd for anything without a cemetery/plot, leaving the
+  // "awaiting review" label with no action behind it.
+  const approved = await reviewReservation(reservationId, staffId);
+  assert.equal(approved.statusCode, 200);
+  assert.match(approved.payload.message, /awaiting cash/i);
+  assert.equal(await reservationStatus(reservationId), 'approved');
+
+  const cash = await recordCash(reservationId, staffId);
+  assert.equal(cash.statusCode, 201);
+  assert.equal(await reservationStatus(reservationId), 'confirmed');
+});
+
 test('the active-plot unique guard covers approved after a schema re-apply', async () => {
   const schema = fs.readFileSync(path.resolve(__dirname, '..', 'database', 'schema.sql'), 'utf8');
   await db.exec(schema);

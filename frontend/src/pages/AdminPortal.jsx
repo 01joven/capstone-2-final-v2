@@ -677,24 +677,20 @@ const Reservations = ({ reservations, onUpdated }) => {
                   <td>
                     {reservation.status === 'pending' ? (
                       <div className="admin-form-actions">
-                        {isPlot && (
-                          <>
-                            <input
-                              type="text"
-                              maxLength={500}
-                              placeholder="Note for family (optional)"
-                              aria-label="Note for family"
-                              value={notes[reservation.id] || ''}
-                              onChange={(event) => setNotes({ ...notes, [reservation.id]: event.target.value })}
-                            />
-                            <button type="button" className="btn btn-primary" disabled={reviewingId === reservation.id} onClick={() => reviewPlot(reservation, 'approve')}>
-                              {reviewingId === reservation.id ? 'Saving...' : 'Approve'}
-                            </button>
-                            <button type="button" className="btn btn-outline" disabled={reviewingId === reservation.id} onClick={() => reviewPlot(reservation, 'reject')}>
-                              Reject
-                            </button>
-                          </>
-                        )}
+                        <input
+                          type="text"
+                          maxLength={500}
+                          placeholder="Note for family (optional)"
+                          aria-label="Note for family"
+                          value={notes[reservation.id] || ''}
+                          onChange={(event) => setNotes({ ...notes, [reservation.id]: event.target.value })}
+                        />
+                        <button type="button" className="btn btn-primary" disabled={reviewingId === reservation.id} onClick={() => reviewPlot(reservation, 'approve')}>
+                          {reviewingId === reservation.id ? 'Saving...' : 'Approve'}
+                        </button>
+                        <button type="button" className="btn btn-outline" disabled={reviewingId === reservation.id} onClick={() => reviewPlot(reservation, 'reject')}>
+                          Reject
+                        </button>
                         <button type="button" className="btn btn-outline" disabled={cancellingId === reservation.id} onClick={() => cancelEntry(reservation)}>
                           {cancellingId === reservation.id ? 'Cancelling...' : 'Cancel'}
                         </button>
