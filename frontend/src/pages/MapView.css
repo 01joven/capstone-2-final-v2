@@ -460,6 +460,17 @@
   margin-top: 12px;
 }
 
+/* Guest-mode helper note shown where a signed-in reservation action would appear */
+.memorial-reserve-note {
+  display: inline-block;
+  min-width: 0;
+  color: var(--text-muted, #6b7280);
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
 /* Memorial Sites Map Row */
 .memorial-sites-map-row {
   border-radius: 20px;

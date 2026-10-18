@@ -16,6 +16,7 @@ const burialRoutes = require('./routes/burials');
 const submissionRoutes = require('./routes/submissions');
 const adminRoutes = require('./routes/admin');
 const staffRoutes = require('./routes/staff');
+const publicRoutes = require('./routes/public');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -81,6 +82,7 @@ app.use('/api/reservations', reservationRoutes);
 app.use('/api/favorites', favoriteRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/burials', burialRoutes);
+app.use('/api/public', publicRoutes);
 app.use('/api/submissions', submissionRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/staff', staffRoutes);

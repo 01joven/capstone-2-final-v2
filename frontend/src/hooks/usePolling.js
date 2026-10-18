@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-const usePolling = (callback, intervalMs = 10000) => {
+const usePolling = (callback, intervalMs = 10000, enabled = true) => {
   const callbackRef = useRef(callback);
   const busyRef = useRef(false);
 
@@ -9,6 +9,8 @@ const usePolling = (callback, intervalMs = 10000) => {
   }, [callback]);
 
   useEffect(() => {
+    if (!enabled) return undefined;
+
     const refresh = async () => {
       if (document.visibilityState !== 'visible' || busyRef.current) return;
       busyRef.current = true;
@@ -29,7 +31,7 @@ const usePolling = (callback, intervalMs = 10000) => {
       window.clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [intervalMs]);
+  }, [intervalMs, enabled]);
 };
 
 export default usePolling;

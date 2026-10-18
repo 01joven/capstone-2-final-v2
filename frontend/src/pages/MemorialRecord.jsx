@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import Layout from '../components/Layout';
-import { burialAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import { burialAPI, publicAPI } from '../services/api';
 import usePolling from '../hooks/usePolling';
 
 const formatDate = (date) => {
@@ -12,6 +13,7 @@ const formatDate = (date) => {
 
 const MemorialRecord = () => {
   const { id } = useParams();
+  const { user } = useAuth();
   const [record, setRecord] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -19,10 +21,15 @@ const MemorialRecord = () => {
   const loadRecord = useCallback(async () => {
     setError('');
     try {
-      const { data } = await burialAPI.getAll({
-        search: `MR-${String(id).padStart(4, '0')}`,
-        cemetery: 'Cogon Cemetery',
-      });
+      const { data } = user
+        ? await burialAPI.getAll({
+            search: `MR-${String(id).padStart(4, '0')}`,
+            cemetery: 'Cogon Cemetery',
+          })
+        : await publicAPI.getBurials({
+            search: `MR-${String(id).padStart(4, '0')}`,
+            cemetery: 'Cogon Cemetery',
+          });
       const matchingRecord = (Array.isArray(data) ? data : []).find((entry) => String(entry.id) === String(id));
       if (!matchingRecord) {
         setError('No memorial record was found for this ID.');
@@ -34,7 +41,7 @@ const MemorialRecord = () => {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, user]);
 
   useEffect(() => {
     setLoading(true);
@@ -42,7 +49,7 @@ const MemorialRecord = () => {
     loadRecord();
   }, [id, loadRecord]);
 
-  usePolling(loadRecord);
+  usePolling(loadRecord, 10000, Boolean(user));
 
   return (
     <Layout>

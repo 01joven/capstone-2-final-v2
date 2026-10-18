@@ -44,7 +44,7 @@ body {
 }
 
 /* Grid/flex children default to min-width: auto, which lets one long word
-   (email, GCash reference, receipt number) force its card wider than the
+   (email, payment reference, receipt number) force its card wider than the
    screen. These guards let the column shrink instead. */
 .payment-item > div,
 .payment-review-item > div,
@@ -233,11 +233,6 @@ textarea:focus {
 .badge-completed {
   background: #dbe9ff;
   color: #1f4e7a;
-}
-
-.badge-pending_verification {
-  background: #fff4dc;
-  color: #7a590f;
 }
 
 .badge-rejected {

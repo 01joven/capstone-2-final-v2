@@ -28,9 +28,9 @@ function App() {
         <Route path="/admin/recovery" element={<PasswordRecovery audience="admin" />} />
         <Route path="/staff/recovery" element={<PasswordRecovery audience="staff" />} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-        <Route path="/map" element={<ProtectedRoute><MapView /></ProtectedRoute>} />
-        <Route path="/search" element={<ProtectedRoute><Search /></ProtectedRoute>} />
-        <Route path="/records/:id" element={<ProtectedRoute><MemorialRecord /></ProtectedRoute>} />
+        <Route path="/map" element={<MapView />} />
+        <Route path="/search" element={<Search />} />
+        <Route path="/records/:id" element={<MemorialRecord />} />
         <Route path="/reservations" element={<ProtectedRoute><ReservationDetail /></ProtectedRoute>} />
         <Route path="/reservations/plot/:section/:lot" element={<ProtectedRoute><ReservationDetail /></ProtectedRoute>} />
         <Route path="/reservations/:id" element={<ProtectedRoute><ReservationDetail /></ProtectedRoute>} />

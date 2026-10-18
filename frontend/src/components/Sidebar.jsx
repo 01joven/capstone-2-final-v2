@@ -1,10 +1,11 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import MemorialLogo from './MemorialLogo';
 import './Sidebar.css';
 
 const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
   const adminLinks = [
     { to: '/admin/dashboard', label: 'Dashboard', icon: '🏠' },
@@ -28,6 +29,8 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
   ];
 
   const publicLinks = [
+    { to: '/', label: 'Home', icon: '🏠' },
+    { to: '/search', label: 'Search Records', icon: '🔎' },
     { to: '/map', label: 'Cemetery Map', icon: '🗺️' },
     { to: '/admin/login', label: 'Admin Portal', icon: '🔐' },
     { to: '/staff/login', label: 'Staff Portal', icon: '👤' },
@@ -97,8 +100,10 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
             type="button"
             className="btn btn-outline sidebar-logout"
             onClick={() => {
+              const target = user?.is_admin ? '/admin/login' : user?.is_staff ? '/staff/login' : '/';
               handleLinkClick();
               logout();
+              navigate(target, { replace: true });
             }}
           >
             Sign Out

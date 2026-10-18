@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useState, useEffect } from 'react';
-import { authAPI } from '../services/api';
+import { authAPI, userAPI } from '../services/api';
 
 const AuthContext = createContext();
 
@@ -36,6 +36,25 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   }, []);
 
+  useEffect(() => {
+    const handlePageShow = (event) => {
+      if (!event.persisted) return;          // only bfcache restores
+      const stored = parseStoredUser();      // re-sync React state from localStorage
+      setUser(stored);
+      if (!stored) {
+        const path = window.location.pathname;
+        const target = path.startsWith('/admin') ? '/admin/login'
+          : path.startsWith('/staff') ? '/staff/login' : '/';
+        window.location.replace(target);
+        return;
+      }
+      // Validate the restored session server-side; a 401 is handled by the API interceptor.
+      userAPI.getProfile().catch(() => {});
+    };
+    window.addEventListener('pageshow', handlePageShow);
+    return () => window.removeEventListener('pageshow', handlePageShow);
+  }, []);
+
   const login = async (email, password) => {
     const { data } = await authAPI.login({ email, password });
     localStorage.setItem('token', data.token);
@@ -54,14 +73,6 @@ export const AuthProvider = ({ children }) => {
 
   const loginStaff = async (email, password) => {
     const { data } = await authAPI.staffLogin({ email, password });
-    localStorage.setItem('token', data.token);
-    localStorage.setItem('user', JSON.stringify(data.user));
-    setUser(data.user);
-    return data.user;
-  };
-
-  const register = async (name, email, password) => {
-    const { data } = await authAPI.register({ name, email, password });
     localStorage.setItem('token', data.token);
     localStorage.setItem('user', JSON.stringify(data.user));
     setUser(data.user);
@@ -89,7 +100,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, login, loginAdmin, loginStaff, register, logout, updateUser, setSessionToken, loading }}>
+    <AuthContext.Provider value={{ user, login, loginAdmin, loginStaff, logout, updateUser, setSessionToken, loading }}>
       {children}
     </AuthContext.Provider>
   );

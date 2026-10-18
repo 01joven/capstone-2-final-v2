@@ -4,7 +4,8 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Link, useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout';
-import { burialAPI, favoriteAPI, memorialAPI, reservationAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import { burialAPI, favoriteAPI, memorialAPI, reservationAPI, publicAPI } from '../services/api';
 import usePolling from '../hooks/usePolling';
 import './MapView.css';
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
@@ -38,6 +39,7 @@ const formatDate = (date) => {
 };
 
 const MapView = () => {
+  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [memorials, setMemorials] = useState([]);
   const [savedItems, setSavedItems] = useState({});
@@ -59,11 +61,14 @@ const MapView = () => {
 
   const loadMapData = useCallback(async () => {
     try {
+      const burialRequest = user ? burialAPI.getAll({ cemetery: 'Cogon Cemetery' }) : publicAPI.getBurials({ cemetery: 'Cogon Cemetery' });
+      const plotRequest = user ? reservationAPI.getPlotReservations() : publicAPI.getPlots();
+      const savedRequest = user ? favoriteAPI.getAll() : Promise.resolve({ data: [] });
       const [burialResult, memorialResult, savedResult, plotReservationResult] = await Promise.allSettled([
-        burialAPI.getAll({ cemetery: 'Cogon Cemetery' }),
+        burialRequest,
         memorialAPI.getAll(),
-        favoriteAPI.getAll(),
-        reservationAPI.getPlotReservations(),
+        savedRequest,
+        plotRequest,
       ]);
       const warnings = [];
       if (burialResult.status === 'fulfilled') setBurials(burialResult.value.data);
@@ -91,13 +96,13 @@ const MapView = () => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     loadMapData();
   }, [loadMapData]);
 
-  usePolling(loadMapData);
+  usePolling(loadMapData, 10000, Boolean(user));
 
   useEffect(() => {
     const burialId = Number(searchParams.get('burialId'));
@@ -154,6 +159,10 @@ const MapView = () => {
   }, [selectedBurialId, selectedPlot]);
 
   const toggleSavedMemorial = async (memorialId) => {
+    if (!user) {
+      setError('Sign in to save memorial sites.');
+      return;
+    }
     setError('');
     setSavingMemorialId(memorialId);
     try {
@@ -394,12 +403,16 @@ const MapView = () => {
                       <p>
                         This spot is available to be reserved for a deceased loved one. Payments are accepted via <strong>Cash (Walk-in)</strong> at the cemetery administration office. No online payments.
                       </p>
-                      <Link
-                        className="btn btn-primary"
-                        to={`/reservations/plot/${selectedPlot.section}/${selectedPlot.lotNumber}`}
-                      >
-                        Reserve this plot for a deceased loved one
-                      </Link>
+                      {user ? (
+                        <Link
+                          className="btn btn-primary"
+                          to={`/reservations/plot/${selectedPlot.section}/${selectedPlot.lotNumber}`}
+                        >
+                          Reserve this plot for a deceased loved one
+                        </Link>
+                      ) : (
+                        <p className="memorial-reserve-note">Plot reservations are arranged in person at the cemetery office (cash/walk-in).</p>
+                      )}
                     </article>
                   );
                 })()}
@@ -462,12 +475,16 @@ const MapView = () => {
                       </div>
                       <div className="mobile-plot-preview-actions">
                         {!reservationForSelected ? (
-                          <Link
-                            className="btn btn-sm btn-primary"
-                            to={`/reservations/plot/${selectedPlot.section}/${selectedPlot.lotNumber}`}
-                          >
-                            Reserve
-                          </Link>
+                          user ? (
+                            <Link
+                              className="btn btn-sm btn-primary"
+                              to={`/reservations/plot/${selectedPlot.section}/${selectedPlot.lotNumber}`}
+                            >
+                              Reserve
+                            </Link>
+                          ) : (
+                            <span className="mobile-plot-preview-meta">In-person reservations (cash/walk-in)</span>
+                          )
                         ) : (
                           <button
                             type="button"
@@ -592,9 +609,13 @@ const MapView = () => {
                           >
                             {savingMemorialId === memorial.id ? '…' : savedItems[memorial.id] ? '❤️ Saved' : '♡ Save'}
                           </button>
-                          <Link to={`/reservations/${memorial.id}`} className="btn btn-primary">
-                            Reserve Plot
-                          </Link>
+                          {user ? (
+                            <Link to={`/reservations/${memorial.id}`} className="btn btn-primary">
+                              Reserve Plot
+                            </Link>
+                          ) : (
+                            <span className="memorial-reserve-note">Plot reservations are arranged in person (cash/walk-in).</span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -654,7 +675,7 @@ const MapView = () => {
                             <br />
                             {memorial.category} — ₱{parseFloat(memorial.price).toLocaleString()}
                             <br />
-                            <Link to={`/reservations/${memorial.id}`}>Reserve Plot</Link>
+                            {user && <Link to={`/reservations/${memorial.id}`}>Reserve Plot</Link>}
                           </Popup>
                         </Marker>
                       ))}

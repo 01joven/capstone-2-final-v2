@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import './MemorialCard.css';
 
-const MemorialCard = ({ memorial, onSave, isSaved, isSaving = false }) => {
+const MemorialCard = ({ memorial, onSave, isSaved, isSaving = false, showReserve = true }) => {
   return (
     <div className="memorial-card card">
       <img
@@ -29,9 +29,13 @@ const MemorialCard = ({ memorial, onSave, isSaved, isSaving = false }) => {
                 {isSaving ? '…' : isSaved ? '❤️' : '🤍'}
               </button>
             )}
-            <Link to={`/reservations/${memorial.id}`} className="btn btn-primary">
-              Book Now
-            </Link>
+            {showReserve ? (
+              <Link to={`/reservations/${memorial.id}`} className="btn btn-primary">
+                Book Now
+              </Link>
+            ) : (
+              <span className="memorial-reserve-note">Plot reservations are arranged in person (cash/walk-in).</span>
+            )}
           </div>
         </div>
       </div>

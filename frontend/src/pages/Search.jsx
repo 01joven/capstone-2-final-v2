@@ -2,11 +2,16 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Layout from '../components/Layout';
 import MemorialCard from '../components/MemorialCard';
-import { burialAPI, memorialAPI, favoriteAPI } from '../services/api';
+import { burialAPI, memorialAPI, favoriteAPI, publicAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import usePolling from '../hooks/usePolling';
 import './Search.css';
 
+const AUTHENTICATED_MIN_SEARCH_LENGTH = 2;
+const ANON_MIN_SEARCH_LENGTH = 3;
+
 const Search = () => {
+  const { user } = useAuth();
   const [memorials, setMemorials] = useState([]);
   const [burials, setBurials] = useState([]);
   const [search, setSearch] = useState('');
@@ -27,8 +32,10 @@ const Search = () => {
     try {
       const [memorialResponse, burialResponse, savedResponse] = await Promise.all([
         memorialAPI.getAll({ search: searchTerm, category: selectedCategory }),
-        burialAPI.getAll({ search: searchTerm, cemetery: 'Cogon Cemetery' }),
-        favoriteAPI.getAll(),
+        user
+          ? burialAPI.getAll({ search: searchTerm, cemetery: 'Cogon Cemetery' })
+          : publicAPI.getBurials({ search: searchTerm, cemetery: 'Cogon Cemetery' }),
+        user ? favoriteAPI.getAll() : Promise.resolve({ data: [] }),
       ]);
       setMemorials(memorialResponse.data);
       setBurials(burialResponse.data);
@@ -44,7 +51,7 @@ const Search = () => {
     } finally {
       if (showLoading) setIsSearching(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     fetchResults(submittedSearch, submittedCategory);
@@ -54,16 +61,27 @@ const Search = () => {
     () => fetchResults(submittedSearch, submittedCategory, { showLoading: false }),
     [fetchResults, submittedSearch, submittedCategory]
   );
-  usePolling(refreshResults);
+  usePolling(refreshResults, 10000, Boolean(user));
 
   const handleSearch = (e) => {
     e.preventDefault();
+    const minSearchLength = user ? AUTHENTICATED_MIN_SEARCH_LENGTH : ANON_MIN_SEARCH_LENGTH;
+    const trimmedSearch = search.trim();
+    if (trimmedSearch.length > 0 && trimmedSearch.length < minSearchLength) {
+      setSearchError(`Enter at least ${minSearchLength} characters to search.`);
+      return;
+    }
+    setSearchError('');
     setSubmittedSearch(search);
     setSubmittedCategory(category);
     setSearchRequestKey((currentKey) => currentKey + 1);
   };
 
   const handleSave = async (memorialId) => {
+    if (!user) {
+      setSearchError('Sign in to save memorial sites.');
+      return;
+    }
     setSearchError('');
     setSavingMemorialId(memorialId);
     try {
@@ -93,6 +111,7 @@ const Search = () => {
     <Layout>
       <div className="page-container">
         <h1 className="page-title">Search Memorials and People</h1>
+        {!user && <p className="search-empty">You are browsing as a visitor. Sign in at the staff/admin desk to save sites or make reservations.</p>}
 
         <form className="search-bar card" onSubmit={handleSearch}>
           <input
@@ -144,9 +163,10 @@ const Search = () => {
             <MemorialCard
               key={m.id}
               memorial={m}
-              onSave={handleSave}
+              onSave={user ? handleSave : undefined}
               isSaved={Boolean(savedItems[m.id])}
               isSaving={savingMemorialId === m.id}
+              showReserve={Boolean(user)}
             />
           ))}
         </div>

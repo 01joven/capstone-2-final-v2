@@ -19,12 +19,14 @@ API.interceptors.response.use(
     const status = error.response?.status;
     const message = error.response?.data?.message || '';
     const isAuthExpired = status === 401 && /session|token|expired|invalid/i.test(message);
-    const isLoginRoute = window.location.pathname.startsWith('/admin/login')
-      || window.location.pathname.startsWith('/staff/login');
+    const currentPath = window.location.pathname;
+    const isLoginRoute = currentPath.startsWith('/admin/login') || currentPath.startsWith('/staff/login');
     if (isAuthExpired && !isLoginRoute) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      window.location.href = '/';
+      const loginPath = currentPath.startsWith('/admin') ? '/admin/login'
+        : currentPath.startsWith('/staff') ? '/staff/login' : '/';
+      window.location.replace(loginPath);
     }
     return Promise.reject(error);
   }
@@ -55,6 +57,11 @@ export const burialAPI = {
   getAll: (params) => API.get('/burials', { params }),
 };
 
+export const publicAPI = {
+  getBurials: (params) => API.get('/public/burials', { params }),
+  getPlots: () => API.get('/public/plots'),
+};
+
 export const reservationAPI = {
   getUserReservations: () => API.get('/reservations/user-reservations'),
   getPlotReservations: () => API.get('/reservations/plots'),
@@ -79,12 +86,6 @@ export const favoriteAPI = {
 export const paymentAPI = {
   getAll: () => API.get('/payments'),
   recordCash: (data) => API.post('/payments/record-cash', data),
-  create: (reservation_id, payment_reference) => API.post('/payments/create', {
-    reservation_id,
-    payment_reference,
-  }),
-  getPendingVerifications: () => API.get('/payments/admin/pending'),
-  verify: (payment_id, action, note) => API.post(`/payments/admin/${payment_id}/verify`, { action, note }),
   getReceipt: (payment_id) => API.get(`/payments/${payment_id}/receipt`),
 };
 

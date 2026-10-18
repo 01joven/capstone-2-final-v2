@@ -18,6 +18,7 @@ const LandingPage = () => {
         {/* Desktop Links */}
         <div className="landing-desktop-links">
           <Link to="/map" className="btn btn-outline nav-btn">Cemetery Map</Link>
+          <Link to="/search" className="btn btn-outline nav-btn">Search Deceased</Link>
           <Link to="/admin/login" className="btn btn-outline nav-btn">Admin Portal</Link>
           <Link to="/staff/login" className="btn btn-primary nav-btn">Staff Portal</Link>
         </div>
@@ -71,6 +72,14 @@ const LandingPage = () => {
                 Cemetery Map
               </Link>
               <Link
+                to="/search"
+                className="mobile-drawer-link"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                <span className="drawer-link-icon">🔍</span>
+                Search Deceased
+              </Link>
+              <Link
                 to="/admin/login"
                 className="mobile-drawer-link"
                 onClick={() => setMobileMenuOpen(false)}
@@ -112,7 +121,7 @@ const LandingPage = () => {
 
           {/* Paragraph Description */}
           <p className="hero-description">
-            Locate where deceased loved ones are laid to rest across Sections A, B, and C.
+            Locate where deceased loved ones are laid to rest across Sections A, B, C, and D.
             Families and walk-in visitors can visit burial spots anytime, with official cash
             reservations handled in person at the cemetery administration office.
           </p>
@@ -121,6 +130,9 @@ const LandingPage = () => {
           <div className="hero-actions-row">
             <Link to="/map" className="hero-pill-btn">
               Explore Cemetery Map
+            </Link>
+            <Link to="/search" className="hero-pill-btn hero-pill-secondary">
+              Search deceased by name
             </Link>
             <Link
               to="/admin/login"

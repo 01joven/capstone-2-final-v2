@@ -1,7 +1,14 @@
+// Diagnostic script: credentials live in backend/.env — never hardcode secrets in source.
+require('dotenv').config({ path: './backend/.env' });
 const { Pool } = require('pg');
-const pool = new Pool({
-  connectionString: 'postgresql://neondb_owner:npg_agD75FLVTWYX@ep-lucky-credit-aqzoi855-pooler.c-8.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require'
-});
+
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  console.error('DATABASE_URL is not set. Add it to backend/.env before running this script.');
+  process.exit(1);
+}
+
+const pool = new Pool({ connectionString });
 
 async function main() {
   const users = await pool.query("SELECT id, name, email, role, is_active FROM users");
@@ -12,6 +19,6 @@ async function main() {
   console.log('\nRecent password reset codes:');
   console.log(codes.rows);
 
-  pool.end();
+  await pool.end();
 }
 main().catch(e => { console.error(e); pool.end(); });

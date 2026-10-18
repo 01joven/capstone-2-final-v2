@@ -260,6 +260,7 @@
 /* Action Row: Dark Pill Button + Floating Circle Button */
 .hero-actions-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 16px;
 }
@@ -282,6 +283,19 @@
 .hero-pill-btn:hover {
   background: #27272a;
   transform: translateY(-2px);
+}
+
+/* Secondary hero action: keeps the map CTA dominant */
+.hero-pill-btn.hero-pill-secondary {
+  background: #ffffff;
+  color: #18181b;
+  border: 1px solid #d4d4d8;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.hero-pill-btn.hero-pill-secondary:hover {
+  background: #f4f4f5;
+  border-color: #a1a1aa;
 }
 
 .hero-circle-btn {
