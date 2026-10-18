@@ -57,7 +57,7 @@ const getDashboard = async (req, res) => {
         (SELECT COUNT(*) FROM burial_records) AS records,
         (SELECT COUNT(*) FROM reservations) AS reservations,
         (SELECT COUNT(*) FROM users WHERE role IN ('staff', 'admin')) AS users,
-        (SELECT COUNT(*) FROM reservations r LEFT JOIN payments p ON p.reservation_id = r.id AND p.payment_status = 'completed' WHERE r.status = 'pending' AND p.id IS NULL) AS pending_payments,
+        (SELECT COUNT(*) FROM reservations r LEFT JOIN payments p ON p.reservation_id = r.id AND p.payment_status = 'completed' WHERE r.status IN ('pending', 'approved') AND p.id IS NULL) AS pending_payments,
         (SELECT COUNT(*) FROM reservations WHERE status = 'pending') AS pending_reservations,
         (SELECT COUNT(*) FROM burial_submissions WHERE status = 'pending') AS pending_submissions`
     );
@@ -84,83 +84,6 @@ const getRecords = async (req, res) => {
   }
 };
 
-const createRecord = async (req, res) => {
-  const validated = validateRecord(req.body, req.user.role);
-  if (validated.error) {
-    return res.status(400).json({ message: validated.error });
-  }
-  if ((req.body || {}).verified_authorized !== true) {
-    return res.status(400).json({ message: 'Explicit verification and publication authorization are required.' });
-  }
-
-  let client;
-  let transactionStarted = false;
-  try {
-    const { fullName, graveReference, birthDate, deathDate, epitaph } = validated.values;
-    client = await pool.connect();
-    await client.query('BEGIN');
-    transactionStarted = true;
-
-    const cemeteryResult = await client.query(
-      `SELECT id FROM cemeteries
-       WHERE name = 'Cogon Cemetery' AND barangay = 'Cogon'
-         AND municipality = 'Cordova' AND province = 'Cebu'
-       FOR UPDATE`
-    );
-    const cemeteryId = cemeteryResult.rows[0]?.id;
-    if (!cemeteryId) {
-      await client.query('ROLLBACK');
-      transactionStarted = false;
-      return res.status(409).json({ message: 'Cogon Cemetery is not configured in the database.' });
-    }
-
-    const plot = parsePlotReference(graveReference);
-    if (plot) {
-      if (await isBurialPlotOccupied(client, cemeteryId, plot.section, plot.lotNumber)) {
-        await client.query('ROLLBACK');
-        transactionStarted = false;
-        return res.status(409).json({ message: 'That plot is already occupied by another memorial record.' });
-      }
-      const reservation = await getActivePlotReservation(client, cemeteryId, plot.section, plot.lotNumber);
-      if (reservation?.status === 'pending') {
-        await client.query('ROLLBACK');
-        transactionStarted = false;
-        return res.status(409).json({ message: 'That plot has a pending reservation request. Review the request before assigning it.' });
-      }
-    }
-
-    const result = await client.query(
-      `INSERT INTO burial_records (cemetery_id, full_name, grave_reference, birth_date, death_date, epitaph)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, full_name, grave_reference, birth_date, death_date, epitaph`,
-      [cemeteryId, fullName, graveReference, birthDate, deathDate, epitaph]
-    );
-    if (plot) {
-      await client.query(
-        `UPDATE reservations SET status = 'completed'
-         WHERE cemetery_id = $1 AND UPPER(plot_section) = $2 AND plot_number = $3 AND status = 'confirmed'`,
-        [cemeteryId, plot.section, plot.lotNumber]
-      );
-    }
-    await client.query('COMMIT');
-    transactionStarted = false;
-    res.status(201).json(result.rows[0]);
-  } catch (error) {
-    if (transactionStarted) {
-      await client.query('ROLLBACK').catch((rollbackError) => {
-        console.error('Create memorial record rollback error:', rollbackError);
-      });
-    }
-    if (error.code === '23505') {
-      return res.status(409).json({ message: 'A record with this name already exists for Cogon Cemetery.' });
-    }
-    console.error('Create admin record error:', error);
-    res.status(500).json({ message: 'Unable to create memorial record.' });
-  } finally {
-    if (client) client.release();
-  }
-};
-
 const updateRecord = async (req, res) => {
   const recordId = Number(req.params.id);
   if (!Number.isSafeInteger(recordId) || recordId < 1) {
@@ -183,7 +106,7 @@ const updateRecord = async (req, res) => {
     transactionStarted = true;
 
     const recordResult = await client.query(
-      'SELECT cemetery_id FROM burial_records WHERE id = $1 FOR UPDATE',
+      'SELECT cemetery_id, grave_reference FROM burial_records WHERE id = $1 FOR UPDATE',
       [recordId]
     );
     if (recordResult.rows.length === 0) {
@@ -192,6 +115,7 @@ const updateRecord = async (req, res) => {
       return res.status(404).json({ message: 'Memorial record not found.' });
     }
     const cemeteryId = recordResult.rows[0].cemetery_id;
+    const previousPlot = parsePlotReference(recordResult.rows[0].grave_reference);
     await client.query('SELECT id FROM cemeteries WHERE id = $1 FOR UPDATE', [cemeteryId]);
 
     const plot = parsePlotReference(graveReference);
@@ -202,10 +126,31 @@ const updateRecord = async (req, res) => {
         return res.status(409).json({ message: 'That plot is already occupied by another memorial record.' });
       }
       const reservation = await getActivePlotReservation(client, cemeteryId, plot.section, plot.lotNumber);
-      if (reservation?.status === 'pending') {
+      // An active reservation holds the plot: only a confirmed (cash paid)
+      // reservation may be assigned, and assigning completes it.
+      if (reservation && reservation.status !== 'confirmed') {
         await client.query('ROLLBACK');
         transactionStarted = false;
-        return res.status(409).json({ message: 'That plot has a pending reservation request. Review the request before assigning it.' });
+        return res.status(409).json({
+          message: reservation.status === 'approved'
+            ? 'That plot request is still awaiting cash payment. Record the payment before assigning it.'
+            : 'That plot has a pending reservation request. Review the request before assigning it.',
+        });
+      }
+      // Strict gate: moving a record onto a plot (new assignment or a change
+      // of plot) requires a paid reservation. Keeping the same plot, or
+      // editing non-plot fields, stays allowed so legacy records remain
+      // maintainable. Without this, staff could bypass the
+      // submission -> approval -> cash -> publish chain via Edit.
+      const plotChanged = !previousPlot
+        || previousPlot.section !== plot.section
+        || previousPlot.lotNumber !== plot.lotNumber;
+      if (plotChanged && !reservation) {
+        await client.query('ROLLBACK');
+        transactionStarted = false;
+        return res.status(409).json({
+          message: 'That plot has no confirmed (paid) reservation. Create a reservation, have staff approve it, record the cash payment, then assign it.',
+        });
       }
     }
 
@@ -801,7 +746,6 @@ const searchReceipts = async (req, res) => {
 module.exports = {
   getDashboard,
   getRecords,
-  createRecord,
   updateRecord,
   deleteRecord,
   getReservations,

@@ -26,10 +26,12 @@ const isBurialPlotOccupied = async (queryable, cemeteryId, section, lotNumber, e
 };
 
 const getActivePlotReservation = async (queryable, cemeteryId, section, lotNumber) => {
+  // 'approved' (reviewed, awaiting cash) still holds the plot until the cash
+  // payment confirms the reservation.
   const result = await queryable.query(
     `SELECT id, status FROM reservations
      WHERE cemetery_id = $1 AND UPPER(plot_section) = $2 AND plot_number = $3
-       AND status IN ('pending', 'confirmed')
+       AND status IN ('pending', 'approved', 'confirmed')
      LIMIT 1`,
     [cemeteryId, section, lotNumber]
   );

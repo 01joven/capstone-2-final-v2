@@ -37,14 +37,18 @@ const Payments = () => {
       setPayments(paymentResponse.data || []);
 
       const allReservations = reservationResponse.data || [];
-      const pending = allReservations.filter(
-        (r) => r.status === 'pending' && (!r.payment_status || r.payment_status !== 'completed')
+      // Cash queue: reservations not yet paid that are awaiting staff review
+      // (pending) or approved and awaiting cash payment. The office may record
+      // cash for either status; completed payments leave the queue.
+      const cashQueue = allReservations.filter(
+        (r) => (r.status === 'pending' || r.status === 'approved')
+          && (!r.payment_status || r.payment_status !== 'completed')
       );
-      setUnpaidReservations(pending);
+      setUnpaidReservations(cashQueue);
 
       const requestedReservationId = Number(searchParams.get('reservation'));
       if (requestedReservationId > 0 && !activePayingId) {
-        const found = pending.find((r) => r.id === requestedReservationId);
+        const found = cashQueue.find((r) => r.id === requestedReservationId);
         if (found) {
           setActivePayingId(found.id);
           setCashAmount(String(found.total_price || ''));
@@ -150,31 +154,36 @@ const Payments = () => {
         {error && <p className="error-msg" role="alert">{error}</p>}
         {message && <p className="success-msg" role="status">{message}</p>}
 
-        {/* Pending Walk-in Reservations Section */}
-        <section className="cash-payments-section card" aria-labelledby="pending-cash-title">
-          <h2 id="pending-cash-title" className="section-title">
-            Pending Plot Reservations (Awaiting Cash Payment)
+        {/* Cash Queue: awaiting review or awaiting cash payment */}
+        <section className="cash-payments-section card" aria-labelledby="cash-queue-title">
+          <h2 id="cash-queue-title" className="section-title">
+            Plot Reservations (Awaiting Review or Cash Payment)
           </h2>
           <p className="admin-provenance-note">
-            When a family member or representative walks in to pay for a plot reservation, verify the deceased person and plot spot, then record the cash payment to issue an official receipt and confirm the reservation.
+            When a family member or representative walks in to pay for a plot reservation, verify the deceased person and plot spot, then record the cash payment to issue an official receipt and confirm the reservation. Rows marked "Awaiting review" have not been approved yet; cash may still be recorded for them.
           </p>
 
           {unpaidReservations.length === 0 ? (
             <p className="payment-empty">
-              {isLoading ? 'Checking pending reservations...' : 'No pending reservations are currently waiting for payment.'}
+              {isLoading ? 'Checking reservations...' : 'No reservations are currently awaiting review or cash payment.'}
             </p>
           ) : (
             <div className="unpaid-reservations-list">
               {unpaidReservations.map((reservation) => {
                 const isPlot = reservation.reservation_type === 'plot' || Boolean(reservation.plot_section);
                 const isPayingThis = activePayingId === reservation.id;
+                const awaitingReview = reservation.status === 'pending';
 
                 return (
                   <article key={reservation.id} className={`unpaid-reservation-card ${isPayingThis ? 'active-paying' : ''}`}>
                     <div className="unpaid-info">
                       <div className="unpaid-header">
                         <span className="record-id">RES-{String(reservation.id).padStart(4, '0')}</span>
-                        <span className="badge badge-pending">Awaiting Cash</span>
+                        {awaitingReview ? (
+                          <span className="badge badge-pending">Awaiting review</span>
+                        ) : (
+                          <span className="badge badge-pending">Awaiting cash payment</span>
+                        )}
                       </div>
                       <h3>
                         {isPlot

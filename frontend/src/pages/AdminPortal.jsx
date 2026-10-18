@@ -6,14 +6,6 @@ import usePolling from '../hooks/usePolling';
 import { useAuth } from '../context/AuthContext';
 import './AdminPortal.css';
 
-const initialRecord = {
-  full_name: '',
-  grave_reference: '',
-  birth_date: '',
-  death_date: '',
-  epitaph: '',
-};
-
 const formatDate = (date) => {
   if (!date) return '—';
   const parsed = new Date(`${String(date).slice(0, 10)}T00:00:00`);
@@ -22,6 +14,21 @@ const formatDate = (date) => {
 
 // Display identifier used across the records view, delete confirmations and dialogs.
 const mrLabel = (record) => `MR-${String(record.id).padStart(4, '0')}`;
+
+// Reservation status machine: pending = awaiting staff review, approved = awaiting
+// cash payment, confirmed = cash recorded (receipt issued), completed = burial
+// record published for the plot, rejected/cancelled = terminal.
+const RESERVATION_STATUS_META = {
+  pending:    { label: 'Awaiting review',       tone: 'pending' },
+  approved:   { label: 'Awaiting cash payment', tone: 'pending' },
+  confirmed:  { label: 'Paid and confirmed',    tone: 'verified' },
+  completed:  { label: 'Completed',             tone: 'verified' },
+  rejected:   { label: 'Rejected',              tone: 'rejected' },
+  cancelled:  { label: 'Cancelled',             tone: 'rejected' },
+};
+
+const reservationStatusMeta = (status) =>
+  RESERVATION_STATUS_META[status] || { label: status ? String(status) : 'Unknown', tone: 'pending' };
 
 // Keep focus cycling inside an open dialog (Tab / Shift+Tab wrap at its edges).
 const trapTabKey = (event, dialog) => {
@@ -132,11 +139,7 @@ const AdminPortal = ({ scope = 'admin' }) => {
         return;
       }
       payload.verified_authorized = true;
-      if (recordForm.id) {
-        await api.updateRecord(recordForm.id, payload);
-      } else {
-        await api.createRecord(payload);
-      }
+      await api.updateRecord(recordForm.id, payload);
       setRecordForm(null);
       refresh();
     } catch (saveError) {
@@ -216,7 +219,8 @@ const Dashboard = ({ data, scope = 'admin' }) => {
   ];
 
   const quickActions = [
-    { label: 'Add Memorial Record', icon: '➕', to: `${base}/records`, desc: 'Register a new burial record' },
+    { label: 'Review Submissions', icon: '📬', to: `${base}/submissions`, desc: 'Approve customer-submitted records' },
+    { label: 'Edit Memorial Records', icon: '🪦', to: `${base}/records`, desc: 'Update published burial records' },
     { label: 'View Reservations', icon: '📋', to: `${base}/reservations`, desc: 'Manage plot reservations' },
     { label: 'Record Cash Payment', icon: '💵', to: '/payments', desc: 'Issue official receipts' },
     { label: 'Cemetery Map', icon: '🗺️', to: '/map', desc: 'View burial plots & sections' },
@@ -416,15 +420,14 @@ const Records = ({ records, recordForm, setRecordForm, startEditing, saveRecord,
   <>
     <div className="admin-heading-row">
       <h1 className="page-title">Memorial Records</h1>
-      {!recordForm && <button className="btn btn-primary" type="button" onClick={() => setRecordForm({ ...initialRecord })}>Add Record</button>}
     </div>
     <p className="admin-provenance-note">
-      Every saved record is live cemetery data. Save a record only after confirming its source and your authorization.
+      Every saved record is live cemetery data. Save a record only after confirming its source and your authorization. New records are added by approving customer memorial submissions.
     </p>
     {deleteError && <p className="error-msg" role="alert">{deleteError}</p>}
     {recordForm && (
       <form className="admin-form card" onSubmit={saveRecord}>
-        <h2>{recordForm.id ? 'Edit record' : 'Add record'}</h2>
+        <h2>Edit record</h2>
         <label>Full name<input maxLength="200" required value={recordForm.full_name} onChange={(event) => setRecordForm({ ...recordForm, full_name: event.target.value })} /></label>
         <label>Grave reference<input maxLength="100" placeholder="Leave blank if unverified" value={recordForm.grave_reference} onChange={(event) => setRecordForm({ ...recordForm, grave_reference: event.target.value })} /></label>
         <label>Date of birth<input type="date" value={recordForm.birth_date} onChange={(event) => setRecordForm({ ...recordForm, birth_date: event.target.value })} /></label>
@@ -632,7 +635,7 @@ const Reservations = ({ reservations, onUpdated }) => {
     <>
       <h1 className="page-title">Reservations</h1>
       <p className="admin-provenance-note">
-        Plot reservations hold burial spots for the deceased. Payments are collected via Walk-in Cash at the cemetery office, issuing an official receipt and confirming the spot on the map.
+        Plot reservations hold burial spots for the deceased. Requests await staff review here; once approved, payment is collected via Walk-in Cash at the cemetery office, issuing an official receipt and confirming the spot on the map.
       </p>
       {error && <p className="error-msg" role="alert">{error}</p>}
       {message && <p className="success-msg" role="status">{message}</p>}
@@ -642,7 +645,8 @@ const Reservations = ({ reservations, onUpdated }) => {
           <tbody>
             {(reservations || []).map((reservation) => {
               const isPlot = reservation.reservation_type === 'plot';
-              const isPaid = reservation.payment_status === 'completed';
+              const isPaid = reservation.payment_status === 'completed' || reservation.status === 'confirmed';
+              const statusMeta = reservationStatusMeta(reservation.status);
               return (
                 <tr key={reservation.id}>
                   <td>{reservation.visitor_name}<br /><small>{reservation.contact || reservation.account_email}</small></td>
@@ -656,38 +660,49 @@ const Reservations = ({ reservations, onUpdated }) => {
                   <td>
                     {isPaid ? (
                       <span className="admin-status verified">Paid Cash</span>
+                    ) : reservation.status === 'approved' ? (
+                      <>
+                        <span className="admin-status pending">Awaiting cash payment</span>
+                        <br /><small>Record the walk-in payment in Payments (Cash Records).</small>
+                      </>
+                    ) : reservation.status === 'pending' ? (
+                      <span className="admin-status pending">Not yet due</span>
                     ) : (
-                      <span className="admin-status pending">Awaiting Cash</span>
+                      <span>Not collected</span>
                     )}
                     {reservation.receipt_no && <><br /><small>OR: {reservation.receipt_no}</small></>}
                   </td>
-                  <td>{reservation.status}</td>
+                  <td><span className={`admin-status ${statusMeta.tone}`}>{statusMeta.label}</span></td>
                   <td>₱{Number(reservation.total_price || 0).toLocaleString()}</td>
-                  <td>{reservation.status === 'pending' ? (
-                    <div className="admin-form-actions">
-                      {isPlot && (
-                        <>
-                          <input
-                            type="text"
-                            maxLength={500}
-                            placeholder="Note for family (optional)"
-                            aria-label="Note for family"
-                            value={notes[reservation.id] || ''}
-                            onChange={(event) => setNotes({ ...notes, [reservation.id]: event.target.value })}
-                          />
-                          <button type="button" className="btn btn-primary" disabled={reviewingId === reservation.id} onClick={() => reviewPlot(reservation, 'approve')}>
-                            {reviewingId === reservation.id ? 'Saving...' : 'Approve'}
-                          </button>
-                          <button type="button" className="btn btn-outline" disabled={reviewingId === reservation.id} onClick={() => reviewPlot(reservation, 'reject')}>
-                            Reject
-                          </button>
-                        </>
-                      )}
-                      <button type="button" className="btn btn-outline" disabled={cancellingId === reservation.id} onClick={() => cancelEntry(reservation)}>
-                        {cancellingId === reservation.id ? 'Cancelling...' : 'Cancel'}
-                      </button>
-                    </div>
-                  ) : '—'}</td>
+                  <td>
+                    {reservation.status === 'pending' ? (
+                      <div className="admin-form-actions">
+                        {isPlot && (
+                          <>
+                            <input
+                              type="text"
+                              maxLength={500}
+                              placeholder="Note for family (optional)"
+                              aria-label="Note for family"
+                              value={notes[reservation.id] || ''}
+                              onChange={(event) => setNotes({ ...notes, [reservation.id]: event.target.value })}
+                            />
+                            <button type="button" className="btn btn-primary" disabled={reviewingId === reservation.id} onClick={() => reviewPlot(reservation, 'approve')}>
+                              {reviewingId === reservation.id ? 'Saving...' : 'Approve'}
+                            </button>
+                            <button type="button" className="btn btn-outline" disabled={reviewingId === reservation.id} onClick={() => reviewPlot(reservation, 'reject')}>
+                              Reject
+                            </button>
+                          </>
+                        )}
+                        <button type="button" className="btn btn-outline" disabled={cancellingId === reservation.id} onClick={() => cancelEntry(reservation)}>
+                          {cancellingId === reservation.id ? 'Cancelling...' : 'Cancel'}
+                        </button>
+                      </div>
+                    ) : reservation.status === 'approved' ? (
+                      <small>Cash is recorded in <Link to="/payments">Payments (Cash Records)</Link>.</small>
+                    ) : '—'}
+                  </td>
                 </tr>
               );
             })}

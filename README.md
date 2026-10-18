@@ -94,7 +94,7 @@ The backend checks its configuration, database connection, and required tables b
 
 Authenticated users (staff or administrator) can use Home, Search, Memorial Record, Map, Reservations, Saved Memorials, Submit Memorial, and Profile. Staff manage memorial records, memorial sites, reservations, reports, and cash payment recording, including reviewing plot requests. Staff sign in at `/staff/login` and work in the Staff Console: Dashboard, Memorial Records, Cemetery Map/Plots, Reservations, Reports, and cash payment recording, including reviewing plot requests. Administrators use `/admin/login` for the same operational screens plus User Management. Administrators can create staff and administrator accounts in User Management and change roles, deactivate, or delete accounts there (never their own, and never the last administrator). There is no public registration. Administrator credential recovery and email changes are performed by a trusted operator, not from self-service account screens.
 
-New burial records are always real data. Saving a record requires confirming verification and publication authorization in the record form.
+New burial records are always real data and are published only by approving a customer memorial submission (staff or admin). The record form is used to correct an existing record, and every edit still requires confirming verification and publication authorization.
 
 Authenticated pages refresh shared records, reservations, plot availability, payment records, saved memorials, and dashboard totals every 10 seconds while visible. Returning to a browser tab refreshes immediately. This is near-real-time polling, not instant push notifications; users need an active connection to the same running backend to see updates.
 
@@ -113,22 +113,21 @@ Authenticated pages refresh shared records, reservations, plot availability, pay
 | GET | `/api/burials?search=name&cemetery=Cogon%20Cemetery` | Search by name, lot, death date, record ID, or section |
 | GET | `/api/reservations/user-reservations` | List the signed-in user's reservations |
 | POST | `/api/reservations/create` | Create a reservation |
-| POST | `/api/reservations/:id/cancel` | Cancel a pending reservation (owner, staff, or admin) |
+| POST | `/api/reservations/:id/cancel` | Cancel a pending or approved (awaiting-cash) reservation (owner, staff, or admin) |
 | POST | `/api/submissions` | Submit memorial information for review (signed-in users) |
 | GET | `/api/submissions/mine` | List my submissions and their review status |
 | GET | `/api/submissions/all` | List all submissions, pending first (staff or admin) |
-| POST | `/api/submissions/:id/review` | Approve (publishes a memorial record) or reject with optional `{ "note" }` (staff or admin) |
+| POST | `/api/submissions/:id/review` | Approve or reject with optional `{ "note" }` (staff or admin). Approving publishes the memorial record; for a plot submission the plot's reservation must already be `confirmed` (cash recorded), otherwise it refuses with 409 |
 | GET | `/api/reservations/plots` | List occupied plot reservations for the Cogon map (signed-in users) |
-| POST | `/api/reservations/plots/:id/review` | Approve or reject a plot request with optional `{ "note" }` (staff or admin); customer is emailed if Resend is configured |
+| POST | `/api/reservations/plots/:id/review` | Approve or reject a plot request with optional `{ "note" }` (staff or admin); approving marks the reservation `approved` (awaiting cash) and never confirms it. The customer is emailed if Resend is configured |
 | GET | `/api/favorites` | List saved memorials |
 | POST | `/api/favorites/add` | Save a memorial |
 | DELETE | `/api/favorites/remove/:saved_id` | Remove a saved memorial by `saved_id` (returned as `saved_id` by `GET /api/favorites`) |
 | GET | `/api/payments` | List payment history |
 | GET | `/api/payments/:id/receipt` | Official receipt for a recorded cash payment (owner, staff, or admin) |
-| POST | `/api/payments/record-cash` | Record a walk-in cash payment, confirm the reservation, and issue the receipt (staff or admin) |
+| POST | `/api/payments/record-cash` | Record a walk-in cash payment and issue the receipt (staff or admin). This is the only path that confirms a reservation (`pending` or `approved` → `confirmed`); a reservation already confirmed or completed returns 409 |
 | GET | `/api/admin/dashboard` | Administrator dashboard counts |
 | GET | `/api/admin/records` | List cemetery memorial records (admin only) |
-| POST | `/api/admin/records` | Create a cemetery memorial record (admin only) |
 | PUT | `/api/admin/records/:id` | Update a cemetery memorial record (admin only) |
 | DELETE | `/api/admin/records/:id` | Delete a cemetery memorial record (admin only) |
 | GET | `/api/admin/sites` | List memorial sites (admin only) |
@@ -146,7 +145,6 @@ Authenticated pages refresh shared records, reservations, plot availability, pay
 | DELETE | `/api/admin/users/:id` | Delete an account (admin only, not self or last admin) |
 | GET | `/api/staff/dashboard` | Staff workspace counts (staff or admin) |
 | GET | `/api/staff/records` | List cemetery memorial records (staff or admin) |
-| POST | `/api/staff/records` | Create a cemetery memorial record (staff or admin) |
 | PUT | `/api/staff/records/:id` | Update a cemetery memorial record (staff or admin) |
 | DELETE | `/api/staff/records/:id` | Delete a cemetery memorial record (staff or admin) |
 | GET | `/api/staff/sites` | List memorial sites (staff or admin) |
@@ -160,7 +158,9 @@ The Memorial Sites view includes an interactive OpenStreetMap centered on the Co
 
 Login and registration use a responsive split-panel layout over the supplied Cogon cemetery photo. The original memorial logo is reused in the authentication header, landing page, and application sidebar.
 
-Payments are Cash (walk-in) only: a staff member or administrator records the payment in Payments, which confirms the reservation and issues the official receipt (`OR-YYYY-000001`) automatically for the customer to view and print. No online payment integration is used: nothing is transferred, detected, or reconciled automatically. Recorded cash stays in the unremitted balance until an administrator records a settlement transfer to the bank/treasury account; recording a transfer attaches every recorded-but-unremitted payment in its period in one transaction, so each payment shows exactly where it is: unremitted or settled. Collections in Reports show recorded totals plus the still-unremitted balance. Customers can also choose a vacant plot from the schematic cemetery map and submit a no-payment request for staff review. Pending and approved requests hold that plot on the map; rejected requests release it. Once staff enter a verified burial record for an approved plot, the map marks it occupied. Plot selection is based on a grave record's `grave_reference` when it is in section/lot form (for example, `A-03`). Records without a grave reference are listed separately, so staff should enter the real grave reference for every record.
+Payments are Cash (walk-in) only: a staff member or administrator records the payment in Payments, which confirms the reservation and issues the official receipt (`OR-YYYY-000001`) automatically for the customer to view and print. No online payment integration is used: nothing is transferred, detected, or reconciled automatically. Recorded cash stays in the unremitted balance until an administrator records a settlement transfer to the bank/treasury account; recording a transfer attaches every recorded-but-unremitted payment in its period in one transaction, so each payment shows exactly where it is: unremitted or settled. Collections in Reports show recorded totals plus the still-unremitted balance.
+
+A reservation moves through four states: `pending` (awaiting staff review) → `approved` (awaiting cash payment) → `confirmed` (cash recorded) → `completed` (burial record published). Customers choose a vacant plot from the schematic cemetery map and submit a no-payment request for staff review; approving that request marks it `approved` and does not confirm it, so a plot is only paid for once the cash is recorded. Pending, approved, and confirmed requests all hold that plot on the map; rejected and cancelled requests release it. Memorial records are added only by approving a submission, and for a plot submission the plot's reservation must already be `confirmed`, so nothing is published before the cash is recorded. Editing a record onto a plot (new assignment or plot change) also requires a `confirmed` reservation; keeping the same plot or editing non-plot fields stays allowed. Once the record is published the map marks the plot occupied. Plot selection is based on a grave record's `grave_reference` when it is in section/lot form (for example, `A-03`). Records without a grave reference are listed separately, so staff should enter the real grave reference for every record.
 
 Authenticated endpoints require `Authorization: Bearer <token>`.
 

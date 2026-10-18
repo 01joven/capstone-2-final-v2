@@ -38,6 +38,44 @@ const formatDate = (date) => {
   return Number.isNaN(parsedDate.getTime()) ? 'Not provided' : parsedDate.toLocaleDateString();
 };
 
+// Reserved-plot wording follows the reservation status machine:
+// pending = awaiting staff review · approved = awaiting cash payment ·
+// confirmed = cash recorded · completed = burial record published.
+const RESERVED_LABELS = {
+  pending: 'Reserved (Awaiting Review)',
+  approved: 'Reserved (Awaiting Cash)',
+  confirmed: 'Reserved (Paid & Confirmed)',
+  rejected: 'Reservation Rejected',
+  cancelled: 'Reservation Cancelled',
+};
+const reservedLabel = (status) => RESERVED_LABELS[status] || 'Reserved';
+
+const reservedAriaState = (status) => {
+  if (status === 'pending') return 'reserved, awaiting review';
+  if (status === 'approved') return 'reserved, awaiting cash payment';
+  if (status === 'confirmed') return 'reserved, paid and confirmed';
+  return 'reserved';
+};
+
+const reservedDetailText = (status) => {
+  if (status === 'pending') return 'currently held for a deceased reservation awaiting staff review';
+  if (status === 'approved') return 'currently held for a deceased reservation awaiting cash payment';
+  if (status === 'confirmed') return 'reserved and paid in cash (official receipt issued)';
+  if (status === 'completed') return 'reserved; the burial record for this spot is published';
+  if (status === 'rejected') return 'held for a reservation request that was rejected';
+  if (status === 'cancelled') return 'held for a reservation that was cancelled';
+  return 'already reserved';
+};
+
+const RESERVED_SHORT_LABELS = {
+  pending: 'Awaiting Review',
+  approved: 'Awaiting Cash',
+  confirmed: 'Paid & Confirmed',
+  rejected: 'Request Rejected',
+  cancelled: 'Reservation Cancelled',
+};
+const reservedShortLabel = (status) => RESERVED_SHORT_LABELS[status] || 'Reserved';
+
 const MapView = () => {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -321,12 +359,12 @@ const MapView = () => {
                                 aria-label={burial
                                   ? `${plotReference}, occupied by ${burial.full_name}`
                                   : isReserved
-                                    ? `${plotReference}, reserved`
+                                    ? `${plotReference}, ${reservedAriaState(plotReservation.status)}`
                                     : `${plotReference}, available`}
                                 title={burial
                                   ? `${burial.full_name}`
                                   : isReserved
-                                    ? `${plotReference} · ${plotReservation.status === 'pending' ? 'Request pending review' : 'Reserved'}`
+                                    ? `${plotReference} · ${reservedLabel(plotReservation.status)}`
                                     : `${plotReference} · Available`}
                                 onClick={() => {
                                   if (burial) {
@@ -385,9 +423,9 @@ const MapView = () => {
                             <p className="record-id">Reserved cemetery plot</p>
                             <h2>Section {selectedPlot.section}, Plot {String(selectedPlot.lotNumber).padStart(2, '0')}</h2>
                           </div>
-                          <span className="badge">{reservationForSelected.status === 'pending' ? 'Reserved (Awaiting Cash)' : 'Reserved'}</span>
+                          <span className="badge">{reservedLabel(reservationForSelected.status)}</span>
                         </div>
-                        <p>This plot is {reservationForSelected.status === 'pending' ? 'currently held for a deceased reservation awaiting cash payment' : 'already reserved'}. Choose a vacant plot to reserve for a deceased loved one.</p>
+                        <p>This plot is {reservedDetailText(reservationForSelected.status)}. Choose a vacant plot to reserve for a deceased loved one.</p>
                       </article>
                     );
                   }
@@ -457,7 +495,6 @@ const MapView = () => {
                   const reservationForSelected = plotReservations.find((reservation) =>
                     reservation.plot_section === selectedPlot.section && Number(reservation.plot_number) === selectedPlot.lotNumber
                   );
-                  const isPending = reservationForSelected?.status === 'pending';
                   return (
                     <aside className="mobile-plot-sticky-bar" aria-label="Selected plot preview">
                       <div className="mobile-plot-preview-info">
@@ -466,10 +503,10 @@ const MapView = () => {
                         </span>
                         <div className="mobile-plot-preview-text">
                           <p className="mobile-plot-preview-name">
-                            {reservationForSelected ? (isPending ? 'Pending Cash' : 'Reserved') : 'Vacant Plot'}
+                            {reservationForSelected ? reservedShortLabel(reservationForSelected.status) : 'Vacant Plot'}
                           </p>
                           <span className="mobile-plot-preview-meta">
-                            Section {selectedPlot.section} · {reservationForSelected ? 'Reserved' : 'Available (Cash)'}
+                            Section {selectedPlot.section} · {reservationForSelected ? reservedLabel(reservationForSelected.status) : 'Available (Cash)'}
                           </span>
                         </div>
                       </div>

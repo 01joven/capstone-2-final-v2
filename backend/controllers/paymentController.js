@@ -72,10 +72,18 @@ const recordCashPayment = async (req, res) => {
       transactionStarted = false;
       return res.status(404).json({ message: 'Reservation not found.' });
     }
-    if (reservation.status === 'cancelled') {
+    // Only a submitted request ('pending') or a staff-reviewed request still
+    // awaiting cash ('approved') can be paid. 'confirmed' already has its
+    // receipt; 'completed'/'cancelled'/'rejected' are terminal.
+    if (!['pending', 'approved'].includes(reservation.status)) {
       await client.query('ROLLBACK');
       transactionStarted = false;
-      return res.status(409).json({ message: 'This reservation has been cancelled.' });
+      const message = reservation.status === 'cancelled'
+        ? 'This reservation has been cancelled.'
+        : reservation.status === 'rejected'
+          ? 'This reservation was rejected.'
+          : 'This reservation has already been confirmed.';
+      return res.status(409).json({ message });
     }
 
     const existingPayment = await client.query(
@@ -125,7 +133,8 @@ const recordCashPayment = async (req, res) => {
 };
 
 // Cash (walk-in) is the only numbered payment path: recordCashPayment is the
-// only writer of completed payments (and the only issuer of receipts).
+// only writer of completed payments, the only issuer of receipts, and the only
+// path that moves a reservation to 'confirmed'.
 const getPaymentReceipt = async (req, res) => {
   const paymentId = Number(req.params.id);
   if (!Number.isSafeInteger(paymentId) || paymentId < 1) {

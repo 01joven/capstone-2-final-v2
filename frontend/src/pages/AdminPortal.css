@@ -321,6 +321,17 @@
   color: #7a590f;
 }
 
+/* Reservation status tones (palette matches .badge-pending / .badge-rejected) */
+.admin-status.pending {
+  background: #fff4dc;
+  color: #7a590f;
+}
+
+.admin-status.rejected {
+  background: #fce1dd;
+  color: #963c2d;
+}
+
 .admin-status.verified {
   background: #d6f1e0;
   color: #1f6f45;

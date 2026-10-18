@@ -23,7 +23,7 @@ const getPlotReservations = async (req, res) => {
        JOIN cemeteries c ON c.id = r.cemetery_id
        WHERE c.name = 'Cogon Cemetery' AND c.barangay = 'Cogon'
          AND c.municipality = 'Cordova' AND c.province = 'Cebu'
-         AND r.plot_section IS NOT NULL AND r.status IN ('pending', 'confirmed')
+         AND r.plot_section IS NOT NULL AND r.status IN ('pending', 'approved', 'confirmed')
        ORDER BY plot_section, plot_number`
     );
     res.json(result.rows);
@@ -245,7 +245,7 @@ const reviewPlotReservation = async (req, res) => {
       }
     }
 
-    const status = action === 'approve' ? 'confirmed' : 'rejected';
+    const status = action === 'approve' ? 'approved' : 'rejected';
     // Conditional update: never overwrite a concurrent cancellation.
     const updated = await client.query(
       'UPDATE reservations SET status = $1, review_note = $2 WHERE id = $3 AND status = $4',
@@ -270,14 +270,14 @@ const reviewPlotReservation = async (req, res) => {
         action === 'approve' ? 'Your plot request was approved' : 'Your plot request was not approved',
         `Hello ${account.name || account.visitor_name},\n\n` +
         (action === 'approve'
-          ? 'Your cemetery plot request has been approved by our staff.'
+          ? 'Your cemetery plot request has been approved by our staff. It is awaiting cash payment: visit the office to pay, and the reservation will be confirmed once the payment is recorded.'
           : 'Your cemetery plot request was reviewed and could not be approved at this time.') +
         (note ? `\n\nNote from staff: ${note}` : '') +
         '\n\nThank you.'
       );
     }
     return res.json({
-      message: action === 'approve' ? 'Plot reservation approved.' : 'Plot reservation rejected.',
+      message: action === 'approve' ? 'Plot reservation approved — awaiting cash payment.' : 'Plot reservation rejected.',
       status,
     });
   } catch (error) {
@@ -318,10 +318,10 @@ const cancelReservation = async (req, res) => {
       transactionStarted = false;
       return res.status(403).json({ message: 'Access denied.' });
     }
-    if (reservation.status !== 'pending') {
+    if (!['pending', 'approved'].includes(reservation.status)) {
       await client.query('ROLLBACK');
       transactionStarted = false;
-      return res.status(409).json({ message: 'Only pending reservations can be cancelled.' });
+      return res.status(409).json({ message: 'Only pending or approved reservations can be cancelled.' });
     }
     await client.query("UPDATE reservations SET status = 'cancelled' WHERE id = $1", [reservationId]);
     // Void any awaiting payment claim so it cannot linger in the verify queue

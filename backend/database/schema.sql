@@ -132,9 +132,13 @@ ALTER TABLE reservations ADD COLUMN IF NOT EXISTS cemetery_id INTEGER REFERENCES
 ALTER TABLE reservations ADD COLUMN IF NOT EXISTS plot_section VARCHAR(10);
 ALTER TABLE reservations ADD COLUMN IF NOT EXISTS plot_number INTEGER;
 ALTER TABLE reservations ADD COLUMN IF NOT EXISTS deceased_name VARCHAR(200);
+-- 'approved' (staff reviewed, awaiting cash) still holds the plot, so it
+-- belongs in this guard alongside pending requests and confirmed reservations.
+-- IF NOT EXISTS never updates an existing definition, so drop and recreate.
+DROP INDEX IF EXISTS reservations_active_plot_unique;
 CREATE UNIQUE INDEX IF NOT EXISTS reservations_active_plot_unique
   ON reservations (cemetery_id, UPPER(plot_section), plot_number)
-  WHERE plot_section IS NOT NULL AND status IN ('pending', 'confirmed');
+  WHERE plot_section IS NOT NULL AND status IN ('pending', 'approved', 'confirmed');
 
 CREATE TABLE IF NOT EXISTS saved_items (
   id SERIAL PRIMARY KEY,
@@ -234,13 +238,14 @@ DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_role_check') THEN
     ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('staff', 'admin')) NOT VALID;
   END IF;
-  -- Recreate to include 'cancelled' (customer/staff cancellation).
+  -- Recreate to include 'cancelled' (customer/staff cancellation) and
+  -- 'approved' (staff reviewed, awaiting cash).
   IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'reservations_status_check') THEN
     ALTER TABLE reservations DROP CONSTRAINT reservations_status_check;
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'reservations_status_check') THEN
     ALTER TABLE reservations ADD CONSTRAINT reservations_status_check
-      CHECK (status IN ('pending', 'confirmed', 'rejected', 'completed', 'cancelled')) NOT VALID;
+      CHECK (status IN ('pending', 'approved', 'confirmed', 'rejected', 'completed', 'cancelled')) NOT VALID;
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'payments_status_check') THEN
     ALTER TABLE payments ADD CONSTRAINT payments_status_check

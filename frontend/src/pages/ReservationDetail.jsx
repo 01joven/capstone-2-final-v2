@@ -12,6 +12,22 @@ const formatDate = (date) => {
   return Number.isNaN(parsed.getTime()) ? '—' : parsed.toLocaleDateString();
 };
 
+// Reservation status machine (customer view):
+// pending = awaiting staff review · approved = awaiting cash payment ·
+// confirmed = cash recorded (receipt issued) · completed = burial record published.
+const reservationStatusBadge = (reservation) => {
+  const status = reservation?.status;
+  if (status === 'confirmed' || reservation?.payment_status === 'completed') {
+    return { text: 'Paid in Cash · Confirmed', tone: 'badge-completed' };
+  }
+  if (status === 'pending') return { text: 'Awaiting review', tone: 'badge-pending' };
+  if (status === 'approved') return { text: 'Awaiting cash payment', tone: 'badge-pending' };
+  if (status === 'completed') return { text: 'Completed', tone: 'badge-completed' };
+  if (status === 'rejected') return { text: 'Rejected', tone: 'badge-rejected' };
+  if (status === 'cancelled') return { text: 'Cancelled', tone: 'badge-rejected' };
+  return { text: status ? String(status) : '—', tone: '' };
+};
+
 const ReservationDetail = () => {
   const { id, section, lot } = useParams();
   const navigate = useNavigate();
@@ -238,7 +254,7 @@ const ReservationsList = () => {
         <div>
           <h2>All Cemetery Plot Reservations</h2>
           <p className="admin-provenance-note">
-            Reservations hold the cemetery plot spot for the deceased. When cash payment is received at the office, the reservation is confirmed and an official receipt is issued so family members and visitors can locate and visit the spot.
+            Reservations hold the cemetery plot spot for the deceased. A submitted request awaits staff review first. Once approved, cash is collected at the office, an official receipt is issued, and the reservation is confirmed so family members and visitors can locate and visit the spot.
           </p>
         </div>
         <Link to="/map" className="btn btn-primary">
@@ -264,15 +280,17 @@ const ReservationsList = () => {
             const spotName = isPlot
               ? `Section ${r.plot_section}, Plot ${String(r.plot_number).padStart(2, '0')}`
               : r.memorial_name;
-            const isPaid = r.payment_status === 'completed';
+            const isPaid = r.payment_status === 'completed' || r.status === 'confirmed';
+            const isAwaitingMoney = r.status === 'pending' || r.status === 'approved';
+            const badge = reservationStatusBadge(r);
 
             return (
               <div key={r.id} className="reservation-item card plot-reservation-item">
                 <div className="reservation-item-body">
                   <div className="reservation-item-top">
                     <span className="record-id">RES-{String(r.id).padStart(4, '0')}</span>
-                    <span className={`badge ${isPaid ? 'badge-completed' : 'badge-pending'}`}>
-                      {isPaid ? 'Paid in Cash · Confirmed' : 'Awaiting Cash Payment'}
+                    <span className={`badge ${badge.tone}`}>
+                      {badge.text}
                     </span>
                   </div>
 
@@ -290,15 +308,17 @@ const ReservationsList = () => {
                     <strong>Payment: </strong>
                     {isPaid ? (
                       <span className="paid-text">₱{parseFloat(r.paid_amount || r.total_price).toLocaleString()} Cash {r.receipt_no ? `(Receipt: ${r.receipt_no})` : ''}</span>
-                    ) : (
+                    ) : isAwaitingMoney ? (
                       <span>₱{parseFloat(r.total_price || 0).toLocaleString()} (Walk-in Cash at Office)</span>
+                    ) : (
+                      <span>Not collected</span>
                     )}
                   </p>
 
                   {r.review_note && <p><small>Staff note: {r.review_note}</small></p>}
 
                   <div className="reservation-item-actions">
-                    {!isPaid && (
+                    {isAwaitingMoney && (
                       <Link to={`/payments?reservation=${r.id}`} className="btn btn-primary">
                         💵 Record Cash Payment
                       </Link>

@@ -171,10 +171,16 @@ const reviewSubmission = async (req, res) => {
           return res.status(409).json({ message: 'That plot is already occupied by another memorial record.' });
         }
         const reservation = await getActivePlotReservation(client, cemeteryId, plot.section, plot.lotNumber);
-        if (reservation?.status === 'pending') {
+        // An active reservation holds the plot: only a confirmed (cash paid)
+        // reservation may be published, and publishing completes it.
+        if (reservation && reservation.status !== 'confirmed') {
           await client.query('ROLLBACK');
           transactionStarted = false;
-          return res.status(409).json({ message: 'That plot has a pending reservation request. Review the request before publishing.' });
+          return res.status(409).json({
+            message: reservation.status === 'approved'
+              ? 'That plot request is still awaiting cash payment. Record the payment before publishing.'
+              : 'That plot has a pending reservation request. Review the request before publishing.',
+          });
         }
       }
 
