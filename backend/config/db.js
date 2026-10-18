@@ -24,9 +24,14 @@ if (process.env.NODE_ENV === 'production' && (!connectionString || isExampleConn
 }
 
 if (!connectionString || isExampleConnection) {
-  const dataDirectory = path.resolve(__dirname, '..', 'data');
-  fs.mkdirSync(dataDirectory, { recursive: true });
-  const database = new PGlite(dataDirectory);
+  // PGLITE_DATA_DIR lets tests run fully in memory (':memory:') so they never
+  // touch the developer's local data directory.
+  const dataDirectory = process.env.PGLITE_DATA_DIR || path.resolve(__dirname, '..', 'data');
+  const inMemory = dataDirectory === ':memory:';
+  if (!inMemory) {
+    fs.mkdirSync(dataDirectory, { recursive: true });
+  }
+  const database = inMemory ? new PGlite() : new PGlite(dataDirectory);
 
   module.exports = {
     isLocal: true,

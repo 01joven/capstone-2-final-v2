@@ -1,7 +1,14 @@
 const pool = require('../config/db');
 const { PLOT_REFERENCE_SQL } = require('../services/plotAvailability');
+const {
+  escapeLikePattern,
+  ANON_MIN_SEARCH_LENGTH,
+  ANON_RESULT_LIMIT,
+  AUTHENTICATED_RESULT_LIMIT,
+} = require('../services/searchQuery');
 
 const MAX_QUERY_LENGTH = 100;
+const AUTHENTICATED_MIN_SEARCH_LENGTH = 2;
 
 // Location comes only from an explicit grave reference. Records without one report no location.
 const getPlotLocation = (record) => {
@@ -32,21 +39,24 @@ const getBurialRecords = async (req, res) => {
     if (search.length > MAX_QUERY_LENGTH || cemetery.length > MAX_QUERY_LENGTH) {
       return res.status(400).json({ message: `Search terms must be ${MAX_QUERY_LENGTH} characters or fewer.` });
     }
+    const isAnonymous = req.anonymousLookup === true;
+    const minSearchLength = isAnonymous ? ANON_MIN_SEARCH_LENGTH : AUTHENTICATED_MIN_SEARCH_LENGTH;
+    const resultLimit = isAnonymous ? ANON_RESULT_LIMIT : AUTHENTICATED_RESULT_LIMIT;
     const values = [];
     const filters = [];
 
     if (search) {
-      if (search.length < 2) {
-        return res.status(400).json({ message: 'Enter at least 2 characters to search.' });
+      if (search.length < minSearchLength) {
+        return res.status(400).json({ message: `Enter at least ${minSearchLength} characters to search.` });
       }
       const sectionMatch = search.match(/^(?:section\s*)?([a-z]{1,10})$/i);
       const recordIdMatch = search.match(/^(?:MR-)?0*(\d{1,9})$/i);
-      values.push(`%${search}%`);
+      values.push(`%${escapeLikePattern(search)}%`);
       const searchFilter = [
-        `b.full_name ILIKE $${values.length}`,
-        `COALESCE(b.grave_reference, '') ILIKE $${values.length}`,
-        `COALESCE(b.death_date::text, '') ILIKE $${values.length}`,
-        `('MR-' || LPAD(b.id::text, 4, '0')) ILIKE $${values.length}`,
+        `b.full_name ILIKE $${values.length} ESCAPE '\\'`,
+        `COALESCE(b.grave_reference, '') ILIKE $${values.length} ESCAPE '\\'`,
+        `COALESCE(b.death_date::text, '') ILIKE $${values.length} ESCAPE '\\'`,
+        `('MR-' || LPAD(b.id::text, 4, '0')) ILIKE $${values.length} ESCAPE '\\'`,
       ];
 
       if (sectionMatch) {
@@ -65,8 +75,8 @@ const getBurialRecords = async (req, res) => {
       filters.push(`(${searchFilter.join(' OR ')})`);
     }
     if (cemetery) {
-      values.push(`%${cemetery}%`);
-      filters.push(`c.name ILIKE $${values.length}`);
+      values.push(`%${escapeLikePattern(cemetery)}%`);
+      filters.push(`c.name ILIKE $${values.length} ESCAPE '\\'`);
     }
     if (section) {
       if (!/^[A-Z]{1,10}$/.test(section)) {
@@ -88,7 +98,7 @@ const getBurialRecords = async (req, res) => {
        JOIN cemeteries c ON c.id = b.cemetery_id
        ${whereClause}
        ORDER BY b.full_name ASC
-       LIMIT 50`,
+       LIMIT ${resultLimit}`,
       values
     );
 

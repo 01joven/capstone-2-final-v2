@@ -148,13 +148,14 @@ CREATE TABLE IF NOT EXISTS payments (
   id SERIAL PRIMARY KEY,
   reservation_id INTEGER REFERENCES reservations(id) ON DELETE CASCADE,
   amount DECIMAL(10, 2) NOT NULL,
-  payment_method VARCHAR(30) DEFAULT 'GCash',
+  payment_method VARCHAR(30) DEFAULT 'Cash',
   payment_reference VARCHAR(64),
   payment_status VARCHAR(50) DEFAULT 'pending',
   transaction_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_method VARCHAR(30) DEFAULT 'GCash';
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_method VARCHAR(30) DEFAULT 'Cash';
+ALTER TABLE payments ALTER COLUMN payment_method SET DEFAULT 'Cash';
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_reference VARCHAR(64);
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS verified_by INTEGER REFERENCES users(id) ON DELETE SET NULL;
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS verified_at TIMESTAMP;
@@ -167,9 +168,21 @@ CREATE UNIQUE INDEX IF NOT EXISTS payments_payment_reference_active_unique
   WHERE payment_reference IS NOT NULL
     AND payment_status IN ('pending_verification', 'completed');
 
--- Official receipts are issued automatically when a payment is approved.
+-- At most one completed payment per reservation. Created defensively: if legacy
+-- data already contains duplicates the index is skipped with a warning instead
+-- of blocking startup. The payment controller pre-checks this too and maps a
+-- unique violation to a friendly 409, so concurrent cash recordings cannot both win.
+DO $$ BEGIN
+  CREATE UNIQUE INDEX IF NOT EXISTS payments_one_completed_per_reservation
+    ON payments (reservation_id)
+    WHERE payment_status = 'completed';
+EXCEPTION WHEN unique_violation THEN
+  RAISE WARNING 'payments_one_completed_per_reservation not created: duplicate completed payments exist for a reservation and must be cleaned up first.';
+END $$;
+
+-- Official receipts are issued automatically when a cash payment is recorded.
 -- One receipt per payment; receipt numbers are deterministic (OR-YYYY-000000)
--- so approval retries stay idempotent.
+-- so recording retries stay idempotent.
 CREATE TABLE IF NOT EXISTS receipts (
   id SERIAL PRIMARY KEY,
   payment_id INTEGER UNIQUE NOT NULL REFERENCES payments(id) ON DELETE CASCADE,
@@ -179,15 +192,15 @@ CREATE TABLE IF NOT EXISTS receipts (
   issued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Remittance log: records transfers of collected GCash money from the
--- cemetery wallet to the bank/treasury account. Money movement itself
+-- Remittance log: records transfers of collected cash from the
+-- collections wallet to the bank/treasury account. Money movement itself
 -- happens off-system; this table is the accountability trail.
 CREATE TABLE IF NOT EXISTS settlement_transfers (
   id SERIAL PRIMARY KEY,
   period_from DATE NOT NULL,
   period_to DATE NOT NULL,
   amount DECIMAL(10, 2) NOT NULL CHECK (amount > 0),
-  from_wallet VARCHAR(100) NOT NULL DEFAULT 'GCash',
+  from_wallet VARCHAR(100) NOT NULL DEFAULT 'Cash on hand',
   to_account VARCHAR(200) NOT NULL,
   transfer_ref VARCHAR(64),
   transferred_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -196,7 +209,7 @@ CREATE TABLE IF NOT EXISTS settlement_transfers (
   CHECK (period_from <= period_to)
 );
 
--- Money destination: every verified payment sits in the GCash wallet
+-- Money destination: every recorded payment sits in the collections wallet
 -- (settlement_id IS NULL) until an administrator remits it to the
 -- treasury/bank via a settlement transfer, which attaches the covered
 -- payments in the same transaction.
