@@ -35,7 +35,7 @@ const StaffLogin = () => {
     <AuthLayout
       pageTitle="Staff Access"
       pageSubtitle="Handle daily cemetery operations."
-      description="Sign in with an authorized staff account to manage memorial records, reservations, reports, and payment verification."
+      description="Sign in with an authorized staff account to manage memorial records, reservations, reports, and cash payment recording."
       promptTitle="Staff Access"
       promptDescription="Sign in with an authorized staff email and password."
     >

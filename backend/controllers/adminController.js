@@ -565,7 +565,7 @@ const getCollections = async (req, res) => {
          WHERE payment_status = 'completed' AND ${rangeFilter}`,
         [range.from, range.to]
       ),
-      // Still sitting in the GCash wallet: verified but not yet remitted.
+      // Still unremitted: recorded but not yet settled.
       pool.query(
         `SELECT COUNT(*) AS count, COALESCE(SUM(amount), 0) AS total
          FROM payments
@@ -635,7 +635,7 @@ const createSettlement = async (req, res) => {
   const toAccount = typeof body.to_account === 'string' ? body.to_account.trim() : '';
   const fromWallet = typeof body.from_wallet === 'string' && body.from_wallet.trim()
     ? body.from_wallet.trim().slice(0, 100)
-    : 'GCash';
+    : 'Cash on hand';
   const transferRef = typeof body.transfer_ref === 'string' && body.transfer_ref.trim()
     ? body.transfer_ref.trim().slice(0, 64)
     : null;
@@ -672,13 +672,13 @@ const createSettlement = async (req, res) => {
       if (Number(preview.rows[0].count) === 0) {
         await client.query('ROLLBACK');
         transactionStarted = false;
-        return res.status(409).json({ message: 'There are no unremitted verified payments in this period.' });
+        return res.status(409).json({ message: 'There are no unremitted recorded payments in this period.' });
       }
       if (Number(amount.toFixed(2)) !== Number(expectedTotal.toFixed(2))) {
         await client.query('ROLLBACK');
         transactionStarted = false;
         return res.status(400).json({
-          message: `Amount must equal the unremitted verified total for this period (₱${expectedTotal.toLocaleString()}).`,
+          message: `Amount must equal the unremitted recorded total for this period (₱${expectedTotal.toLocaleString()}).`,
         });
       }
       const result = await client.query(
@@ -688,7 +688,7 @@ const createSettlement = async (req, res) => {
         [periodFrom, periodTo, amount, fromWallet, toAccount, transferRef, req.user.id]
       );
       // Destination: every verified-but-unremitted payment in the period
-      // moves from the GCash wallet into this transfer atomically.
+      // moves from the collections wallet into this transfer atomically.
       const covered = await client.query(
         `UPDATE payments
          SET settlement_id = $1
@@ -752,7 +752,7 @@ const voidSettlement = async (req, res) => {
     await client.query('COMMIT');
     transactionStarted = false;
     res.json({
-      message: 'Settlement transfer voided. Attached payments returned to the GCash wallet.',
+      message: 'Settlement transfer voided. Attached payments returned to the unremitted balance.',
       released_count: released.rows.length,
     });
   } catch (error) {
