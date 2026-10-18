@@ -109,12 +109,16 @@ const MapView = () => {
         plotRequest,
       ]);
       const warnings = [];
-      if (burialResult.status === 'fulfilled') setBurials(burialResult.value.data);
-      else warnings.push('burial records');
+      // Normalize sections to uppercase on load so legacy mixed-case rows
+      // cannot split a section card or miss plot matches on the map.
+      if (burialResult.status === 'fulfilled') {
+        setBurials(burialResult.value.data.map((row) => (row.section ? { ...row, section: String(row.section).toUpperCase() } : row)));
+      } else warnings.push('burial records');
       if (memorialResult.status === 'fulfilled') setMemorials(memorialResult.value.data);
       else warnings.push('memorial sites');
-      if (plotReservationResult.status === 'fulfilled') setPlotReservations(plotReservationResult.value.data);
-      else warnings.push('plot reservations');
+      if (plotReservationResult.status === 'fulfilled') {
+        setPlotReservations(plotReservationResult.value.data.map((row) => (row.plot_section ? { ...row, plot_section: String(row.plot_section).toUpperCase() } : row)));
+      } else warnings.push('plot reservations');
       if (savedResult.status === 'fulfilled') {
         setSavedItems(Object.fromEntries(savedResult.value.data.map((item) => [
           item.id,

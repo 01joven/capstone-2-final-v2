@@ -64,6 +64,19 @@
 - UI: AdminPortal labels each state (awaiting review / awaiting cash payment / paid and confirmed), the records view dropped the Add Record path and its dashboard shortcut now points at submissions, the cash queue includes approved reservations, and the map and reservation detail distinguish the states in text as well as colour.
 - Tests: new `backend/test/workflow.test.js` (15 tests) covers the state machine, the payment gate, the held-plot rules, the strict edit gate, and the removal of direct record creation. Backend suite: 39 passing.
 
+## Senior audit pass (broken flows and money gates)
+- Receipts are only issued for completed cash payments: `GET /payments/:id/receipt` returns 409 for rejected/awaiting payments instead of minting a printable receipt number for a voided payment.
+- Recording cash requires a positive amount. An amount below the reservation's quoted fee is refused unless the staff member adds a note; the note is stored in the payment's `admin_note` and shown in payment history, so reduced receipts carry their justification.
+- Customers can cancel an `approved` (awaiting-cash) reservation from their reservation list, matching the backend rule (previously only `pending` rows showed Cancel).
+- Memorial-site (non-plot) reservations are now reviewable: the review endpoint no longer 404s for reservations without a cemetery/plot (plot occupancy checks run only for plot requests), and the admin/staff reservations table shows Approve/Reject for every pending row — "Awaiting review" was previously a dead label with no action.
+- Memorial record detail validates the route id before querying: non-numeric ids show "no record found" instead of a misleading search failure.
+- Memorial site search escapes LIKE wildcards (`%`, `_`) like burial search already did.
+- Held-plot conflicts now say why the plot is unavailable ("awaiting staff review" / "awaiting cash payment" / "already paid and confirmed") instead of one generic message. Plot sections are uppercased server-side (`UPPER(plot_section)`) and again at map load, so legacy mixed-case rows cannot split a section card or miss plot matches.
+- The reservation fee input is read-only: customers no longer edit the quoted fee (memorial-site fees were already server-set).
+- Removed the tracked diagnostic scripts (`checklogin.js`, `testlogin.js`, `check_user.js`, `check_schema.js`, `check_ratelimit.js`, `fix_timestamps.js`, `list_users.js`); they pointed at the live local database and were not referenced by any package script, README, or CI job.
+- Verified already-guarded, no change needed: staff receipt search renders only for admins (`isAdmin` gate in Reports); `updateUserRole`/`setUserActive`/`deleteUser` already block self-changes and demoting or deleting the last active administrator; saved-item keying (`saved_id` = row, `id` = memorial) is consistent across Search, Map, and Saved — now locked by the new `favorites.test.js`.
+- Tests: +2 in `payments.test.js` (receipt gate, amount gates), +1 in `workflow.test.js` (memorial review → pay → confirm), new `favorites.test.js` (2 contract tests). Backend suite: 44 passing.
+
 ## Dependencies and CI
 - Applied `npm audit fix` for the root workspace: axios (many advisories) and form-data updated, shell-quote (via concurrently) resolved. Remaining: 3 high in the dev-only nodemon -> chokidar -> braces chain (no non-breaking fix exists) and 2 moderate in react-router 6.30.4 (fix requires the react-router-dom 7 major upgrade).
 - `frontend/package-lock.json` was stale (it still recorded the vite 4-era `@vitejs/plugin-react@^4.3.3`); regenerated so it matches `frontend/package.json`, with axios raised to `^1.20.0` in both the manifest and the lock so the deployed frontend cannot resolve a vulnerable version.

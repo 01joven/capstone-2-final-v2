@@ -184,10 +184,10 @@ const ReservationDetail = () => {
                   min="0"
                   step="0.01"
                   value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                  placeholder="5000"
+                  readOnly
+                  aria-readonly="true"
                 />
-                <small className="form-help">Payable in Cash at the cemetery administration office.</small>
+                <small className="form-help">Fee set by the cemetery office. Payable in Cash at the administration office.</small>
               </div>
 
               {error && <p className="error-msg">{error}</p>}

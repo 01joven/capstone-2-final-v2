@@ -1,5 +1,5 @@
 const pool = require('../config/db');
-const { isBurialPlotOccupied } = require('../services/plotAvailability');
+const { isBurialPlotOccupied, getActivePlotReservation } = require('../services/plotAvailability');
 const { sendEmail } = require('../services/emailService');
 
 // Best-effort notification: never fails the reservation action.
@@ -18,7 +18,7 @@ const todayInAppTimezone = () => new Date().toLocaleDateString('en-CA', {
 const getPlotReservations = async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT r.plot_section, r.plot_number, r.status
+      `SELECT UPPER(r.plot_section) AS plot_section, r.plot_number, r.status
        FROM reservations r
        JOIN cemeteries c ON c.id = r.cemetery_id
        WHERE c.name = 'Cogon Cemetery' AND c.barangay = 'Cogon'
@@ -109,6 +109,7 @@ const createReservation = async (req, res) => {
 
     let client;
     let transactionStarted = false;
+    let cemeteryId = null;
     try {
       client = await pool.connect();
       await client.query('BEGIN');
@@ -120,7 +121,7 @@ const createReservation = async (req, res) => {
            AND municipality = 'Cordova' AND province = 'Cebu'
          FOR UPDATE`
       );
-      const cemeteryId = cemeteryResult.rows[0]?.id;
+      cemeteryId = cemeteryResult.rows[0]?.id;
       if (!cemeteryId) {
         await client.query('ROLLBACK');
         transactionStarted = false;
@@ -150,6 +151,19 @@ const createReservation = async (req, res) => {
         });
       }
       if (error.code === '23505') {
+        // Tell the customer exactly what holds the plot: awaiting review,
+        // awaiting cash payment, or already paid (occupied plots are caught
+        // before the insert with their own message).
+        try {
+          const active = await getActivePlotReservation(client, cemeteryId, plotSection, plotNumber);
+          const reason = active?.status === 'pending' ? 'is awaiting staff review'
+            : active?.status === 'approved' ? 'is awaiting cash payment'
+            : active?.status === 'confirmed' ? 'is already paid and confirmed'
+            : 'has already been requested or reserved';
+          return res.status(409).json({ message: `This plot ${reason}. Choose another plot.` });
+        } catch (lookupError) {
+          console.error('Held-plot lookup error:', lookupError);
+        }
         return res.status(409).json({ message: 'This plot has already been requested or reserved.' });
       }
       console.error('Create plot reservation error:', error);
