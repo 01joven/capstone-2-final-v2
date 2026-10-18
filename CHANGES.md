@@ -58,6 +58,9 @@
 - `frontend/package-lock.json` was stale (it still recorded the vite 4-era `@vitejs/plugin-react@^4.3.3`); regenerated so it matches `frontend/package.json`, with axios raised to `^1.20.0` in both the manifest and the lock so the deployed frontend cannot resolve a vulnerable version.
 - Added `.github/workflows/ci.yml`: install with `npm ci`, run the backend tests, build the frontend, and fail on high or critical advisories in production dependencies.
 
+## Local development
+- Sign-in rate limiting: the per-IP limit (30 attempts / 15 minutes) now applies only when `NODE_ENV=production`. The limiter is in-memory and single-instance, so repeatedly signing in from one machine during development locked the developer out for 15 minutes ("Too many sign-in attempts from this network"). The per-account limit (10 attempts / 15 minutes per email) still applies locally and in production, and production keeps the per-IP limit.
+
 ## Not changed (see notes)
 - Tokens remain in `localStorage`. Moving to httpOnly cookies is a larger refactor.
 - No CSP or SRI for Leaflet from unpkg. Add these as deployment headers after testing the map.

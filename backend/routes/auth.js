@@ -34,7 +34,13 @@ const resetConfirmIpLimit = createRateLimiter({
   message: 'Too many reset attempts. Try again later.',
 });
 
-const signIn = [loginIpLimit, loginAccountLimit];
+// The IP limit protects the hosted deployment against brute-force attempts. It is
+// skipped outside production: the limiter is in-memory and single-instance, so a
+// developer signing in repeatedly from one machine locks only themselves out for 15
+// minutes. The per-account limit always applies, locally and in production.
+const signIn = process.env.NODE_ENV === 'production'
+  ? [loginIpLimit, loginAccountLimit]
+  : [loginAccountLimit];
 
 const router = express.Router();
 
