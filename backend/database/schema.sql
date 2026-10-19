@@ -93,6 +93,9 @@ ALTER TABLE burial_records DROP COLUMN IF EXISTS is_demo;
 -- Epitaph on burial records (optional memorial inscription, up to 500 chars).
 ALTER TABLE burial_records ADD COLUMN IF NOT EXISTS epitaph TEXT;
 
+-- Scheduled burial/funeral date, may be set in advance (not only at interment).
+ALTER TABLE burial_records ADD COLUMN IF NOT EXISTS burial_date DATE;
+
 -- Customer-submitted memorial information. Staff review publishes approved
 -- submissions as burial records; users see only their own submissions.
 CREATE TABLE IF NOT EXISTS burial_submissions (
@@ -112,6 +115,9 @@ CREATE TABLE IF NOT EXISTS burial_submissions (
 );
 CREATE INDEX IF NOT EXISTS burial_submissions_user_id_idx ON burial_submissions (user_id);
 CREATE INDEX IF NOT EXISTS burial_submissions_status_idx ON burial_submissions (status);
+
+-- Scheduled burial/funeral date, may be set in advance while the submission is pending.
+ALTER TABLE burial_submissions ADD COLUMN IF NOT EXISTS burial_date DATE;
 
 CREATE TABLE IF NOT EXISTS reservations (
   id SERIAL PRIMARY KEY,
@@ -212,6 +218,9 @@ CREATE TABLE IF NOT EXISTS settlement_transfers (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CHECK (period_from <= period_to)
 );
+
+-- to_account/transfer_ref were retired from the settlement form; legacy rows keep their values, so new transfers may store NULL.
+ALTER TABLE settlement_transfers ALTER COLUMN to_account DROP NOT NULL;
 
 -- Money destination: every recorded payment sits in the collections wallet
 -- (settlement_id IS NULL) until an administrator remits it to the

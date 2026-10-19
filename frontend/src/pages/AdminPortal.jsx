@@ -596,6 +596,8 @@ const SitesManager = ({ api }) => {
 const Reservations = ({ reservations, onUpdated }) => {
   const [reviewingId, setReviewingId] = useState(null);
   const [cancellingId, setCancellingId] = useState(null);
+  const [confirmingId, setConfirmingId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
   const [notes, setNotes] = useState({});
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -628,6 +630,38 @@ const Reservations = ({ reservations, onUpdated }) => {
       setError(cancelError.response?.data?.message || 'Could not cancel this reservation.');
     } finally {
       setCancellingId(null);
+    }
+  };
+
+  const confirmEntry = async (reservation) => {
+    if (!window.confirm(`Confirm reservation for ${reservation.visitor_name}? This bypasses cash recording.`)) return;
+    setConfirmingId(reservation.id);
+    setError('');
+    setMessage('');
+    try {
+      const { data } = await reservationAPI.confirm(reservation.id);
+      setMessage(data.message);
+      onUpdated();
+    } catch (confirmError) {
+      setError(confirmError.response?.data?.message || 'Could not confirm this reservation.');
+    } finally {
+      setConfirmingId(null);
+    }
+  };
+
+  const deleteEntry = async (reservation) => {
+    if (!window.confirm(`Delete reservation for ${reservation.visitor_name}? This cannot be undone.`)) return;
+    setDeletingId(reservation.id);
+    setError('');
+    setMessage('');
+    try {
+      const { data } = await reservationAPI.remove(reservation.id);
+      setMessage(data.message);
+      onUpdated();
+    } catch (deleteError) {
+      setError(deleteError.response?.data?.message || 'Could not delete this reservation.');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -688,6 +722,9 @@ const Reservations = ({ reservations, onUpdated }) => {
                         <button type="button" className="btn btn-primary" disabled={reviewingId === reservation.id} onClick={() => reviewPlot(reservation, 'approve')}>
                           {reviewingId === reservation.id ? 'Saving...' : 'Approve'}
                         </button>
+                        <button type="button" className="btn btn-primary" disabled={confirmingId === reservation.id} onClick={() => confirmEntry(reservation)}>
+                          {confirmingId === reservation.id ? 'Confirming...' : 'Confirm'}
+                        </button>
                         <button type="button" className="btn btn-outline" disabled={reviewingId === reservation.id} onClick={() => reviewPlot(reservation, 'reject')}>
                           Reject
                         </button>
@@ -696,7 +733,21 @@ const Reservations = ({ reservations, onUpdated }) => {
                         </button>
                       </div>
                     ) : reservation.status === 'approved' ? (
-                      <small>Cash is recorded in <Link to="/payments">Payments (Cash Records)</Link>.</small>
+                      <>
+                        <small>Cash is recorded in <Link to="/payments">Payments (Cash Records)</Link>.</small>
+                        <div className="admin-form-actions">
+                          <button type="button" className="btn btn-primary" disabled={confirmingId === reservation.id} onClick={() => confirmEntry(reservation)}>
+                            {confirmingId === reservation.id ? 'Confirming...' : 'Confirm'}
+                          </button>
+                          <button type="button" className="btn btn-outline" disabled={deletingId === reservation.id} onClick={() => deleteEntry(reservation)}>
+                            {deletingId === reservation.id ? 'Deleting...' : 'Delete'}
+                          </button>
+                        </div>
+                      </>
+                    ) : reservation.status === 'rejected' || reservation.status === 'cancelled' ? (
+                      <button type="button" className="btn btn-outline" disabled={deletingId === reservation.id} onClick={() => deleteEntry(reservation)}>
+                        {deletingId === reservation.id ? 'Deleting...' : 'Delete'}
+                      </button>
                     ) : '—'}
                   </td>
                 </tr>
@@ -714,15 +765,16 @@ const Reservations = ({ reservations, onUpdated }) => {
 const Submissions = ({ submissions, onUpdated }) => {
   const [reviewingId, setReviewingId] = useState(null);
   const [notes, setNotes] = useState({});
+  const [burialDates, setBurialDates] = useState({});
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
-  const review = async (submission, action) => {
+  const review = async (submission, action, burialDate) => {
     setReviewingId(submission.id);
     setError('');
     setMessage('');
     try {
-      const { data } = await submissionAPI.review(submission.id, action, notes[submission.id] || undefined);
+      const { data } = await submissionAPI.review(submission.id, action, notes[submission.id] || undefined, burialDate || undefined);
       setMessage(data.message);
       onUpdated();
     } catch (reviewError) {
@@ -746,7 +798,7 @@ const Submissions = ({ submissions, onUpdated }) => {
               <tr key={submission.id}>
                 <td>{submission.submitter_name}<br /><small>{submission.submitter_email}</small></td>
                 <td>{submission.full_name}<br /><small>Lot: {submission.grave_reference || 'Unassigned'}</small></td>
-                <td>Born: {formatDate(submission.birth_date)}<br />Died: {formatDate(submission.death_date)}</td>
+                <td>Born: {formatDate(submission.birth_date)}<br />Died: {formatDate(submission.death_date)}{submission.burial_date && <><br />Burial: {formatDate(submission.burial_date)}</>}</td>
                 <td>{submission.epitaph ? <small><em>“{submission.epitaph}”</em></small> : '—'}</td>
                 <td>{submission.status}{submission.review_note ? <><br /><small>Note: {submission.review_note}</small></> : null}</td>
                 <td>{submission.status === 'pending' ? (
@@ -759,10 +811,16 @@ const Submissions = ({ submissions, onUpdated }) => {
                       value={notes[submission.id] || ''}
                       onChange={(event) => setNotes({ ...notes, [submission.id]: event.target.value })}
                     />
-                    <button type="button" className="btn btn-primary" disabled={reviewingId === submission.id} onClick={() => review(submission, 'approve')}>
+                    <input
+                      type="date"
+                      aria-label="Burial date (optional)"
+                      value={burialDates[submission.id] ?? (submission.burial_date ? String(submission.burial_date).slice(0, 10) : '')}
+                      onChange={(event) => setBurialDates({ ...burialDates, [submission.id]: event.target.value })}
+                    />
+                    <button type="button" className="btn btn-primary" disabled={reviewingId === submission.id} onClick={() => review(submission, 'approve', burialDates[submission.id])}>
                       {reviewingId === submission.id ? 'Saving...' : 'Approve & Publish'}
                     </button>
-                    <button type="button" className="btn btn-outline" disabled={reviewingId === submission.id} onClick={() => review(submission, 'reject')}>
+                    <button type="button" className="btn btn-outline" disabled={reviewingId === submission.id} onClick={() => review(submission, 'reject', burialDates[submission.id])}>
                       Reject
                     </button>
                   </div>
@@ -791,7 +849,7 @@ const Reports = ({ report, scope = 'admin' }) => {
   const [dateTo, setDateTo] = useState('');
   const [settlements, setSettlements] = useState([]);
   const [settlementsError, setSettlementsError] = useState('');
-  const [settlementForm, setSettlementForm] = useState({ period_from: '', period_to: '', amount: '', to_account: '', transfer_ref: '' });
+  const [settlementForm, setSettlementForm] = useState({ period_from: '', period_to: '', amount: '' });
   const [settlementSaving, setSettlementSaving] = useState(false);
   const [settlementMessage, setSettlementMessage] = useState('');
   const [voidingId, setVoidingId] = useState(null);
@@ -880,7 +938,7 @@ const Reports = ({ report, scope = 'admin' }) => {
         ...data,
         transferred_by_name: data.transferred_by_name || 'you',
       }, ...current]);
-      setSettlementForm({ period_from: '', period_to: '', amount: '', to_account: '', transfer_ref: '' });
+      setSettlementForm({ period_from: '', period_to: '', amount: '' });
       setSettlementMessage(
         `Settlement transfer recorded. ${data.covered_count ?? 0} verified payment(s) (₱${Number(data.covered_total ?? 0).toLocaleString()}) moved from the cash records into this transfer.`
       );
@@ -1009,8 +1067,6 @@ const Reports = ({ report, scope = 'admin' }) => {
             <label>Collection period from<input type="date" required value={settlementForm.period_from} onChange={(event) => setSettlementForm({ ...settlementForm, period_from: event.target.value })} /></label>
             <label>Collection period to<input type="date" required value={settlementForm.period_to} onChange={(event) => setSettlementForm({ ...settlementForm, period_to: event.target.value })} /></label>
             <label>Amount (₱)<input type="number" min="1" step="0.01" required value={settlementForm.amount} onChange={(event) => setSettlementForm({ ...settlementForm, amount: event.target.value })} /></label>
-            <label>Destination bank/treasury account<input maxLength="200" required placeholder="e.g. BDO ...1234 — Cemetery Trust" value={settlementForm.to_account} onChange={(event) => setSettlementForm({ ...settlementForm, to_account: event.target.value })} /></label>
-            <label>Transfer reference (optional)<input maxLength="64" placeholder="Bank transfer ref" value={settlementForm.transfer_ref} onChange={(event) => setSettlementForm({ ...settlementForm, transfer_ref: event.target.value })} /></label>
             <div className="admin-form-actions">
               <button className="btn btn-primary" type="submit" disabled={settlementSaving}>{settlementSaving ? 'Recording...' : 'Record Transfer'}</button>
             </div>
@@ -1020,7 +1076,7 @@ const Reports = ({ report, scope = 'admin' }) => {
             : (
               <ul>{settlements.map((transfer) => (
                 <li key={transfer.id}>
-                  {String(transfer.period_from).slice(0, 10)} to {String(transfer.period_to).slice(0, 10)} · ₱{Number(transfer.amount).toLocaleString()} → {transfer.to_account}
+                  {String(transfer.period_from).slice(0, 10)} to {String(transfer.period_to).slice(0, 10)} · ₱{Number(transfer.amount).toLocaleString()}{transfer.to_account ? ` → ${transfer.to_account}` : ''}
                   {transfer.transfer_ref ? ` · Ref ${transfer.transfer_ref}` : ''} · by {transfer.transferred_by_name || 'staff'}
                   <br /><small>Covers {transfer.covered_count ?? 0} verified payment(s) · ₱{Number(transfer.covered_total ?? 0).toLocaleString()}</small>
                   {' '}<button type="button" className="btn btn-outline" disabled={voidingId === transfer.id} onClick={() => handleVoidSettlement(transfer)}>

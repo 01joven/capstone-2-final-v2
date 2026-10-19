@@ -90,3 +90,9 @@
 - No CSP or SRI for Leaflet from unpkg. Add these as deployment headers after testing the map.
 - Rate limiter is per instance and resets on restart.
 - No duplicate-booking rule for memorial sites.
+
+## Admin confirm/delete, settlement form cleanup, scheduled burial date
+- Reservations: new `POST /api/reservations/:id/confirm` (staff or admin) confirms a pending or approved reservation directly, bypassing cash recording. New `DELETE /api/reservations/:id` (admin) removes the reservation row (payments cascade); it refuses confirmed/completed reservations and any reservation with a `completed` payment so recorded cash and receipts can never be deleted away. The Admin Portal Reservations table exposes Confirm and Delete: pending rows get Confirm alongside Approve/Reject/Cancel, approved rows get Confirm + Delete next to the cash guidance, and rejected/cancelled rows get a Delete for cleanup.
+- Settlement transfers: the destination bank/treasury account and transfer reference are gone from the record form and from the backend write path (inserts store NULL; the columns and one validation block were removed, legacy rows keep their stored values and remain visible in the transfers list). `settlement_transfers.to_account` was made nullable in the schema.
+- Scheduled burial date: `burial_submissions` and `burial_records` gained an optional `burial_date`. Customers may set a burial/funeral date (typically in advance, e.g. a funeral being scheduled while the submission awaits review) when submitting; staff can set or edit it on a pending submission from the review row, and on approval it is published with the memorial record. The admin submissions table and the customer's "My submissions" list show the date when set.
+- Validation: backend suite 44 passing; frontend build clean.

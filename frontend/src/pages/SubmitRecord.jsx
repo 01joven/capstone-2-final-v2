@@ -9,6 +9,7 @@ const emptyForm = {
   grave_reference: '',
   birth_date: '',
   death_date: '',
+  burial_date: '',
   epitaph: '',
 };
 
@@ -45,6 +46,7 @@ const SubmitRecord = () => {
         grave_reference: form.grave_reference || null,
         birth_date: form.birth_date || null,
         death_date: form.death_date || null,
+        burial_date: form.burial_date || null,
         epitaph: form.epitaph || null,
       });
       setForm({ ...emptyForm });
@@ -84,6 +86,10 @@ const SubmitRecord = () => {
             <input id="submission-death" type="date" value={form.death_date} onChange={(e) => setForm({ ...form, death_date: e.target.value })} />
           </div>
           <div className="form-group">
+            <label htmlFor="submission-burial">Burial / funeral date (optional)</label>
+            <input id="submission-burial" type="date" value={form.burial_date} onChange={(e) => setForm({ ...form, burial_date: e.target.value })} />
+          </div>
+          <div className="form-group">
             <label htmlFor="submission-epitaph">Epitaph (optional)</label>
             <textarea id="submission-epitaph" maxLength={500} rows={3} placeholder="A short memorial inscription, up to 500 characters" value={form.epitaph} onChange={(e) => setForm({ ...form, epitaph: e.target.value })} />
           </div>
@@ -102,6 +108,7 @@ const SubmitRecord = () => {
                 <div className="reservation-item-body">
                   <h3>{s.full_name}</h3>
                   <p>Lot: {s.grave_reference || 'Unassigned'}</p>
+                  {s.burial_date && <p>Burial: {new Date(s.burial_date).toLocaleDateString()}</p>}
                   {s.epitaph && <p><em>“{s.epitaph}”</em></p>}
                   <span className={`badge badge-${s.status === 'approved' ? 'confirmed' : s.status === 'rejected' ? 'rejected' : 'pending'}`}>{s.status}</span>
                   {s.review_note && <p><small>Staff note: {s.review_note}</small></p>}

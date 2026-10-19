@@ -577,13 +577,9 @@ const createSettlement = async (req, res) => {
   const body = req.body || {};
   const periodFrom = typeof body.period_from === 'string' ? body.period_from : '';
   const periodTo = typeof body.period_to === 'string' ? body.period_to : '';
-  const toAccount = typeof body.to_account === 'string' ? body.to_account.trim() : '';
   const fromWallet = typeof body.from_wallet === 'string' && body.from_wallet.trim()
     ? body.from_wallet.trim().slice(0, 100)
     : 'Cash on hand';
-  const transferRef = typeof body.transfer_ref === 'string' && body.transfer_ref.trim()
-    ? body.transfer_ref.trim().slice(0, 64)
-    : null;
   const amount = Number(body.amount);
 
   if (!DATE_PATTERN.test(periodFrom) || !DATE_PATTERN.test(periodTo) || periodFrom > periodTo) {
@@ -591,9 +587,6 @@ const createSettlement = async (req, res) => {
   }
   if (!Number.isFinite(amount) || amount <= 0 || amount > 1000000000) {
     return res.status(400).json({ message: 'Enter a valid amount greater than zero.' });
-  }
-  if (!toAccount || toAccount.length > 200) {
-    return res.status(400).json({ message: 'Enter the destination bank/treasury account (1 to 200 characters).' });
   }
 
   try {
@@ -626,11 +619,13 @@ const createSettlement = async (req, res) => {
           message: `Amount must equal the unremitted recorded total for this period (₱${expectedTotal.toLocaleString()}).`,
         });
       }
+      // Destination account/reference were retired from the form; the columns
+      // remain for legacy rows, so new transfers store NULL for both.
       const result = await client.query(
         `INSERT INTO settlement_transfers (period_from, period_to, amount, from_wallet, to_account, transfer_ref, transferred_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         VALUES ($1, $2, $3, $4, NULL, NULL, $5)
          RETURNING *`,
-        [periodFrom, periodTo, amount, fromWallet, toAccount, transferRef, req.user.id]
+        [periodFrom, periodTo, amount, fromWallet, req.user.id]
       );
       // Destination: every verified-but-unremitted payment in the period
       // moves from the collections wallet into this transfer atomically.

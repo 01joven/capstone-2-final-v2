@@ -67,6 +67,8 @@ export const reservationAPI = {
   getPlotReservations: () => API.get('/reservations/plots'),
   create: (data) => API.post('/reservations/create', data),
   cancel: (id) => API.post(`/reservations/${id}/cancel`),
+  confirm: (id) => API.post(`/reservations/${id}/confirm`),
+  remove: (id) => API.delete(`/reservations/${id}`),
   reviewPlot: (id, action, note) => API.post(`/reservations/plots/${id}/review`, { action, note }),
 };
 
@@ -74,7 +76,7 @@ export const submissionAPI = {
   create: (data) => API.post('/submissions', data),
   mine: () => API.get('/submissions/mine'),
   all: () => API.get('/submissions/all'),
-  review: (id, action, note) => API.post(`/submissions/${id}/review`, { action, note }),
+  review: (id, action, note, burialDate) => API.post(`/submissions/${id}/review`, { action, note, burial_date: burialDate }),
 };
 
 export const favoriteAPI = {

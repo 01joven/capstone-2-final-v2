@@ -24,6 +24,7 @@ const validateSubmission = (body = {}) => {
   const graveReference = typeof body.grave_reference === 'string' ? body.grave_reference.trim() : '';
   const birthDate = body.birth_date || null;
   const deathDate = body.death_date || null;
+  const burialDate = body.burial_date || null;
   const epitaph = typeof body.epitaph === 'string' && body.epitaph.trim()
     ? body.epitaph.trim().slice(0, 500)
     : null;
@@ -48,10 +49,19 @@ const validateSubmission = (body = {}) => {
       return { error: `${label} must be a valid date.` };
     }
   }
+  // The scheduled burial date is optional and may be set in advance.
+  if (burialDate !== null && (
+    typeof burialDate !== 'string' ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(burialDate) ||
+    Number.isNaN(new Date(`${burialDate}T00:00:00.000Z`).getTime()) ||
+    new Date(`${burialDate}T00:00:00.000Z`).toISOString().slice(0, 10) !== burialDate
+  )) {
+    return { error: 'Enter a valid burial date (YYYY-MM-DD).' };
+  }
   if (typeof body.epitaph === 'string' && body.epitaph.trim().length > 500) {
     return { error: 'Epitaph must be 500 characters or fewer.' };
   }
-  return { values: { fullName, graveReference: graveReference || null, birthDate, deathDate, epitaph } };
+  return { values: { fullName, graveReference: graveReference || null, birthDate, deathDate, burialDate, epitaph } };
 };
 
 const COGON_WHERE = `name = 'Cogon Cemetery' AND barangay = 'Cogon'
@@ -74,10 +84,10 @@ const createSubmission = async (req, res) => {
   try {
     const v = validated.values;
     const result = await pool.query(
-      `INSERT INTO burial_submissions (user_id, full_name, grave_reference, birth_date, death_date, epitaph)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO burial_submissions (user_id, full_name, grave_reference, birth_date, death_date, burial_date, epitaph)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [req.user.id, v.fullName, v.graveReference, v.birthDate, v.deathDate, v.epitaph]
+      [req.user.id, v.fullName, v.graveReference, v.birthDate, v.deathDate, v.burialDate, v.epitaph]
     );
     res.status(201).json(result.rows[0]);
   } catch (error) {
@@ -118,11 +128,22 @@ const reviewSubmission = async (req, res) => {
   const submissionId = Number(req.params.id);
   const action = (req.body || {}).action;
   const note = typeof (req.body || {}).note === 'string' ? req.body.note.trim().slice(0, 500) : null;
+  const burialDate = (req.body || {}).burial_date || null;
   if (!Number.isSafeInteger(submissionId) || submissionId < 1) {
     return res.status(400).json({ message: 'A valid submission ID is required.' });
   }
   if (!['approve', 'reject'].includes(action)) {
     return res.status(400).json({ message: 'Choose approve or reject.' });
+  }
+  // Staff can schedule the burial date while the submission is pending; it is
+  // persisted with the decision and published with the record on approval.
+  if (burialDate !== null && (
+    typeof burialDate !== 'string' ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(burialDate) ||
+    Number.isNaN(new Date(`${burialDate}T00:00:00.000Z`).getTime()) ||
+    new Date(`${burialDate}T00:00:00.000Z`).toISOString().slice(0, 10) !== burialDate
+  )) {
+    return res.status(400).json({ message: 'Enter a valid burial date (YYYY-MM-DD).' });
   }
 
   let client;
@@ -186,12 +207,12 @@ const reviewSubmission = async (req, res) => {
 
       try {
         const recordResult = await client.query(
-          `INSERT INTO burial_records (cemetery_id, full_name, grave_reference, birth_date, death_date, epitaph)
-           VALUES ($1, $2, $3, $4, $5, $6)
+          `INSERT INTO burial_records (cemetery_id, full_name, grave_reference, birth_date, death_date, burial_date, epitaph)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
            RETURNING id`,
           [cemeteryId, submission.full_name, submission.grave_reference,
             toDateOnly(submission.birth_date), toDateOnly(submission.death_date),
-            submission.epitaph]
+            burialDate || toDateOnly(submission.burial_date), submission.epitaph]
         );
         recordId = recordResult.rows[0].id;
       } catch (error) {
@@ -214,9 +235,10 @@ const reviewSubmission = async (req, res) => {
     const status = action === 'approve' ? 'approved' : 'rejected';
     await client.query(
       `UPDATE burial_submissions
-       SET status = $1, review_note = $2, reviewed_by = $3, reviewed_at = CURRENT_TIMESTAMP
+       SET status = $1, review_note = $2, reviewed_by = $3, reviewed_at = CURRENT_TIMESTAMP,
+           burial_date = COALESCE($5, burial_date)
        WHERE id = $4`,
-      [status, note || null, req.user.id, submissionId]
+      [status, note || null, req.user.id, submissionId, burialDate]
     );
     await client.query('COMMIT');
     transactionStarted = false;
