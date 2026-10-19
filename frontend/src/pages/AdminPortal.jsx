@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import Layout from '../components/Layout';
-import { adminAPI, reservationAPI, staffAPI, submissionAPI } from '../services/api';
+import { adminAPI, reservationAPI, staffAPI } from '../services/api';
 import usePolling from '../hooks/usePolling';
 import { useAuth } from '../context/AuthContext';
 import './AdminPortal.css';
@@ -61,6 +61,7 @@ const AdminPortal = ({ scope = 'admin' }) => {
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
   const [recordForm, setRecordForm] = useState(null);
+  const [createForm, setCreateForm] = useState(null);
   const [saving, setSaving] = useState(false);
 
   const view = pathname.split('/').pop();
@@ -69,7 +70,6 @@ const AdminPortal = ({ scope = 'admin' }) => {
     dashboard: api.getDashboard,
     records: api.getRecords,
     reservations: api.getReservations,
-    submissions: submissionAPI.all,
     reports: api.getReports,
     users: api.getUsers,
   };
@@ -104,8 +104,8 @@ const AdminPortal = ({ scope = 'admin' }) => {
 
   const pollCurrentView = async () => {
     if (typeof loaders[view] !== 'function') return;
-    // Don't clobber an edit in progress or a save error while the form is open.
-    if (recordForm) return;
+    // Don't clobber an edit or a new record in progress while a form is open.
+    if (recordForm || createForm) return;
     try {
       const { data: responseData } = await loaders[view]();
       setData(responseData);
@@ -158,6 +158,33 @@ const AdminPortal = ({ scope = 'admin' }) => {
     epitaph: record.epitaph || '',
   });
 
+  const submitCreateRecord = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setError('');
+    try {
+      if (!window.confirm('Confirm that this record is verified and you are authorized to publish it as cemetery data.')) {
+        setSaving(false);
+        return;
+      }
+      await api.createRecord({
+        full_name: createForm.full_name,
+        grave_reference: createForm.grave_reference.trim(),
+        birth_date: createForm.birth_date || null,
+        death_date: createForm.death_date || null,
+        burial_date: createForm.burial_date || null,
+        epitaph: createForm.epitaph.trim() || null,
+        verified_authorized: true,
+      });
+      setCreateForm(null);
+      refresh();
+    } catch (saveError) {
+      setError(saveError.response?.data?.message || 'Could not create this record.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const ready = !loading && !error && data !== null && loadedView === view;
 
   return (
@@ -172,6 +199,9 @@ const AdminPortal = ({ scope = 'admin' }) => {
               records={data}
               recordForm={recordForm}
               setRecordForm={setRecordForm}
+              createForm={createForm}
+              setCreateForm={setCreateForm}
+              submitCreateRecord={submitCreateRecord}
               startEditing={startEditing}
               saveRecord={saveRecord}
               saving={saving}
@@ -182,7 +212,6 @@ const AdminPortal = ({ scope = 'admin' }) => {
           </>
         )}
         {ready && view === 'reservations' && <Reservations reservations={data} onUpdated={refresh} />}
-        {ready && view === 'submissions' && <Submissions submissions={data} onUpdated={refresh} />}
         {ready && view === 'reports' && <Reports report={data} scope={scope} />}
         {ready && view === 'users' && <Users users={data} onCreated={refresh} />}
       </div>
@@ -194,7 +223,6 @@ const STAT_CONFIG = {
   'Memorial Records':      { icon: '🪦', accent: '#5a8a6e', bg: 'rgba(90,138,110,0.1)' },
   'Reservations':          { icon: '📋', accent: '#5a7ab5', bg: 'rgba(90,122,181,0.1)' },
   'Pending Reservations':  { icon: '⏳', accent: '#c47f2a', bg: 'rgba(196,127,42,0.1)' },
-  'Pending Submissions':   { icon: '📬', accent: '#9a5ab5', bg: 'rgba(154,90,181,0.1)' },
   'Staff Accounts':        { icon: '👥', accent: '#3d8fa0', bg: 'rgba(61,143,160,0.1)' },
   'Cash Payments & Receipts': { icon: '💵', accent: '#b55a5a', bg: 'rgba(181,90,90,0.1)' },
 };
@@ -213,14 +241,13 @@ const Dashboard = ({ data, scope = 'admin' }) => {
     ['Memorial Records', data?.records ?? 0, `${base}/records`],
     ['Reservations', data?.reservations ?? 0, `${base}/reservations`],
     ['Pending Reservations', data?.pending_reservations ?? 0, `${base}/reservations`],
-    ['Pending Submissions', data?.pending_submissions ?? 0, `${base}/submissions`],
     ...(scope === 'staff' ? [] : [['Staff Accounts', data?.users ?? 0, '/admin/users']]),
     ['Cash Payments & Receipts', data?.pending_payments ?? 0, '/payments'],
   ];
 
   const quickActions = [
-    { label: 'Review Submissions', icon: '📬', to: `${base}/submissions`, desc: 'Approve customer-submitted records' },
-    { label: 'Edit Memorial Records', icon: '🪦', to: `${base}/records`, desc: 'Update published burial records' },
+    { label: 'Add Memorial Record', icon: '🪦', to: `${base}/records`, desc: 'Encode walk-in burial records' },
+    { label: 'Edit Memorial Records', icon: '📝', to: `${base}/records`, desc: 'Update published burial records' },
     { label: 'View Reservations', icon: '📋', to: `${base}/reservations`, desc: 'Manage plot reservations' },
     { label: 'Record Cash Payment', icon: '💵', to: '/payments', desc: 'Issue official receipts' },
     { label: 'Cemetery Map', icon: '🗺️', to: '/map', desc: 'View burial plots & sections' },
@@ -385,7 +412,7 @@ const RecordDetailModal = ({ record, onClose, returnFocusRef }) => {
 };
 
 
-const Records = ({ records, recordForm, setRecordForm, startEditing, saveRecord, saving, api, onUpdated }) => {
+const Records = ({ records, recordForm, setRecordForm, createForm, setCreateForm, submitCreateRecord, startEditing, saveRecord, saving, api, onUpdated }) => {
   const [deletingId, setDeletingId] = useState(null);
   const [deleteError, setDeleteError] = useState('');
   const [viewingRecord, setViewingRecord] = useState(null);
@@ -420,11 +447,37 @@ const Records = ({ records, recordForm, setRecordForm, startEditing, saveRecord,
   <>
     <div className="admin-heading-row">
       <h1 className="page-title">Memorial Records</h1>
+      <button
+        type="button"
+        className="btn btn-primary"
+        onClick={() => setCreateForm({
+          full_name: '', grave_reference: '', birth_date: '', death_date: '', burial_date: '', epitaph: '',
+        })}
+      >
+        + Add Record (walk-in)
+      </button>
     </div>
     <p className="admin-provenance-note">
-      Every saved record is live cemetery data. Save a record only after confirming its source and your authorization. New records are added by approving customer memorial submissions.
+      Every saved record is live cemetery data. Save a record only after confirming its source and your authorization.
+      Records are encoded directly here for walk-in customers; assigning a plot requires that plot's confirmed
+      (cash-paid) reservation, and publishing the record completes the reservation.
     </p>
     {deleteError && <p className="error-msg" role="alert">{deleteError}</p>}
+    {createForm && (
+      <form className="admin-form card" onSubmit={submitCreateRecord}>
+        <h2>Add record (walk-in)</h2>
+        <label>Full name<input maxLength="200" required value={createForm.full_name} onChange={(event) => setCreateForm({ ...createForm, full_name: event.target.value })} /></label>
+        <label>Grave reference<input maxLength="100" placeholder="Section and lot, e.g. A-03 — leave blank if not plot-based" value={createForm.grave_reference} onChange={(event) => setCreateForm({ ...createForm, grave_reference: event.target.value })} /></label>
+        <label>Date of birth<input type="date" value={createForm.birth_date} onChange={(event) => setCreateForm({ ...createForm, birth_date: event.target.value })} /></label>
+        <label>Date of death<input type="date" value={createForm.death_date} onChange={(event) => setCreateForm({ ...createForm, death_date: event.target.value })} /></label>
+        <label>Burial / funeral date (optional)<input type="date" value={createForm.burial_date} onChange={(event) => setCreateForm({ ...createForm, burial_date: event.target.value })} /></label>
+        <label>Epitaph (optional)<textarea maxLength={500} rows={2} placeholder="Short memorial inscription" value={createForm.epitaph} onChange={(event) => setCreateForm({ ...createForm, epitaph: event.target.value })} /></label>
+        <div className="admin-form-actions">
+          <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Publishing...' : 'Publish Record'}</button>
+          <button className="btn btn-outline" type="button" onClick={() => setCreateForm(null)}>Cancel</button>
+        </div>
+      </form>
+    )}
     {recordForm && (
       <form className="admin-form card" onSubmit={saveRecord}>
         <h2>Edit record</h2>
@@ -758,79 +811,6 @@ const Reservations = ({ reservations, onUpdated }) => {
         </table>
       </div>
       <Link className="btn btn-primary" to="/payments">💵 Manage Cash Payments &amp; Receipts</Link>
-    </>
-  );
-};
-
-const Submissions = ({ submissions, onUpdated }) => {
-  const [reviewingId, setReviewingId] = useState(null);
-  const [notes, setNotes] = useState({});
-  const [burialDates, setBurialDates] = useState({});
-  const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
-
-  const review = async (submission, action, burialDate) => {
-    setReviewingId(submission.id);
-    setError('');
-    setMessage('');
-    try {
-      const { data } = await submissionAPI.review(submission.id, action, notes[submission.id] || undefined, burialDate || undefined);
-      setMessage(data.message);
-      onUpdated();
-    } catch (reviewError) {
-      setError(reviewError.response?.data?.message || 'Could not review this submission.');
-    } finally {
-      setReviewingId(null);
-    }
-  };
-
-  return (
-    <>
-      <h1 className="page-title">Memorial Submissions</h1>
-      <p className="admin-provenance-note">Customer-submitted memorial information. Approving publishes it as a memorial record; rejecting sends it back with a note.</p>
-      {error && <p className="error-msg" role="alert">{error}</p>}
-      {message && <p className="success-msg" role="status">{message}</p>}
-      <div className="admin-table-wrap card">
-        <table className="admin-table">
-          <thead><tr><th>Submitted by</th><th>Departed person</th><th>Dates</th><th>Epitaph</th><th>Status</th><th>Review</th></tr></thead>
-          <tbody>
-            {(submissions || []).map((submission) => (
-              <tr key={submission.id}>
-                <td>{submission.submitter_name}<br /><small>{submission.submitter_email}</small></td>
-                <td>{submission.full_name}<br /><small>Lot: {submission.grave_reference || 'Unassigned'}</small></td>
-                <td>Born: {formatDate(submission.birth_date)}<br />Died: {formatDate(submission.death_date)}{submission.burial_date && <><br />Burial: {formatDate(submission.burial_date)}</>}</td>
-                <td>{submission.epitaph ? <small><em>“{submission.epitaph}”</em></small> : '—'}</td>
-                <td>{submission.status}{submission.review_note ? <><br /><small>Note: {submission.review_note}</small></> : null}</td>
-                <td>{submission.status === 'pending' ? (
-                  <div className="admin-form-actions">
-                    <input
-                      type="text"
-                      maxLength={500}
-                      placeholder="Note for customer (optional)"
-                      aria-label="Note for customer"
-                      value={notes[submission.id] || ''}
-                      onChange={(event) => setNotes({ ...notes, [submission.id]: event.target.value })}
-                    />
-                    <input
-                      type="date"
-                      aria-label="Burial date (optional)"
-                      value={burialDates[submission.id] ?? (submission.burial_date ? String(submission.burial_date).slice(0, 10) : '')}
-                      onChange={(event) => setBurialDates({ ...burialDates, [submission.id]: event.target.value })}
-                    />
-                    <button type="button" className="btn btn-primary" disabled={reviewingId === submission.id} onClick={() => review(submission, 'approve', burialDates[submission.id])}>
-                      {reviewingId === submission.id ? 'Saving...' : 'Approve & Publish'}
-                    </button>
-                    <button type="button" className="btn btn-outline" disabled={reviewingId === submission.id} onClick={() => review(submission, 'reject', burialDates[submission.id])}>
-                      Reject
-                    </button>
-                  </div>
-                ) : '—'}</td>
-              </tr>
-            ))}
-            {(submissions || []).length === 0 && <tr><td colSpan="6">No submissions have been made.</td></tr>}
-          </tbody>
-        </table>
-      </div>
     </>
   );
 };

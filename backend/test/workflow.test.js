@@ -1,6 +1,7 @@
-// Integration tests for the customer workflow contract:
-//   - memorial records are created only by approving a submission;
+// Integration tests for the walk-in workflow contract:
+//   - memorial records are created directly by staff/admin (walk-in counter model);
 //   - a plot reservation becomes 'confirmed' only by recording cash;
+//   - publishing a record onto a plot requires that plot's reservation to be confirmed;
 //   - an approved (awaiting cash) reservation still holds its plot.
 // Runs against an isolated in-memory embedded database (':memory:' via
 // PGLITE_DATA_DIR): no network connection and no writes to on-disk dev data.
@@ -16,7 +17,6 @@ const path = require('node:path');
 const db = require('../config/db');
 const reservationController = require('../controllers/reservationController');
 const paymentController = require('../controllers/paymentController');
-const submissionController = require('../controllers/submissionController');
 const adminController = require('../controllers/adminController');
 const adminRouter = require('../routes/admin');
 const staffRouter = require('../routes/staff');
@@ -54,13 +54,25 @@ const insertPlotReservation = async (userId, plotNumber, status, section = 'W') 
   return result.rows[0].id;
 };
 
-const insertSubmission = async (userId, fullName, graveReference) => {
-  const result = await db.query(
-    `INSERT INTO burial_submissions (user_id, full_name, grave_reference)
-     VALUES ($1, $2, $3) RETURNING id`,
-    [userId, fullName, graveReference]
+const createRecord = async (staffUserId, fullName, plotReference, extraBody = {}) => {
+  const res = createResponse();
+  await adminController.createRecord(
+    {
+      user: { id: staffUserId, role: 'staff' },
+      body: {
+        full_name: fullName,
+        grave_reference: plotReference,
+        birth_date: null,
+        death_date: null,
+        burial_date: null,
+        epitaph: null,
+        verified_authorized: true,
+        ...extraBody,
+      },
+    },
+    res
   );
-  return result.rows[0].id;
+  return res;
 };
 
 const reservationStatus = async (reservationId) => {
@@ -91,22 +103,13 @@ const recordCash = async (reservationId, staffId, amount = 500) => {
   return res;
 };
 
-const reviewSubmission = async (submissionId, staffId) => {
-  const res = createResponse();
-  await submissionController.reviewSubmission(
-    { user: { id: staffId, role: 'staff' }, params: { id: String(submissionId) }, body: { action: 'approve' } },
-    res
-  );
-  return res;
-};
-
 const routeMethods = (router, routePath) => router.stack
   .filter((layer) => layer.route && layer.route.path === routePath)
   .flatMap((layer) => Object.keys(layer.route.methods));
 
 let cemeteryId;
-let customerId; // owns every reservation and submission created here
-let staffId; // reviews submissions and records cash
+let customerId; // owns every reservation created here (the walk-in customer's file)
+let staffId; // creates records and records cash on duty
 
 test.before(async () => {
   assert.equal(db.isLocal, true, 'workflow tests must run against the embedded database');
@@ -182,25 +185,21 @@ test("recording cash for a 'rejected' reservation is refused and writes nothing"
   assert.equal(await reservationStatus(reservationId), 'rejected');
 });
 
-test("a submission for a plot with a 'pending' reservation is refused with 409 and creates no record", async () => {
+test("creating a record onto a plot with a 'pending' reservation is refused with 409 and writes nothing", async () => {
   const reservationId = await insertPlotReservation(customerId, 201, 'pending', 'S');
-  const submissionId = await insertSubmission(customerId, 'Pending Plot Person', 'S-201');
 
-  const res = await reviewSubmission(submissionId, staffId);
+  const res = await createRecord(staffId, 'Pending Plot Person', 'S-201');
 
   assert.equal(res.statusCode, 409);
   assert.match(res.payload.message, /pending reservation/i);
   assert.equal(await recordCountForName('Pending Plot Person'), 0);
-  const submission = await db.query('SELECT status FROM burial_submissions WHERE id = $1', [submissionId]);
-  assert.equal(submission.rows[0].status, 'pending');
   assert.equal(await reservationStatus(reservationId), 'pending');
 });
 
-test("a submission for a plot with an 'approved' (awaiting cash) reservation is refused with 409", async () => {
+test("creating a record onto a plot with an 'approved' (awaiting cash) reservation is refused with 409", async () => {
   const reservationId = await insertPlotReservation(customerId, 202, 'approved', 'S');
-  const submissionId = await insertSubmission(customerId, 'Awaiting Cash Person', 'S-202');
 
-  const res = await reviewSubmission(submissionId, staffId);
+  const res = await createRecord(staffId, 'Awaiting Cash Person', 'S-202');
 
   assert.equal(res.statusCode, 409);
   assert.match(res.payload.message, /awaiting cash payment/i);
@@ -208,28 +207,53 @@ test("a submission for a plot with an 'approved' (awaiting cash) reservation is 
   assert.equal(await reservationStatus(reservationId), 'approved');
 });
 
-test("a submission for a plot with a 'confirmed' reservation publishes the record and completes the reservation", async () => {
+test("creating a record onto a plot with a 'confirmed' reservation publishes it and completes the reservation", async () => {
   const reservationId = await insertPlotReservation(customerId, 203, 'pending', 'S');
   const cash = await recordCash(reservationId, staffId);
   assert.equal(cash.statusCode, 201);
   assert.equal(await reservationStatus(reservationId), 'confirmed');
-  const submissionId = await insertSubmission(customerId, 'Confirmed Plot Person', 'S-203');
 
-  const res = await reviewSubmission(submissionId, staffId);
+  const res = await createRecord(staffId, 'Confirmed Plot Person', 'S-203');
 
-  assert.equal(res.statusCode, 200);
-  assert.ok(res.payload.record_id, 'publishing must return the created record id');
+  assert.equal(res.statusCode, 201);
+  assert.ok(res.payload.id, 'creation must return the created record id');
   assert.equal(await recordCountForName('Confirmed Plot Person'), 1);
   assert.equal(await reservationStatus(reservationId), 'completed');
 });
 
-test('a submission with no plot reference still publishes', async () => {
-  const submissionId = await insertSubmission(customerId, 'No Plot Person', null);
+test('creating a record onto a vacant plot without a reservation is refused (money gate)', async () => {
+  const res = await createRecord(staffId, 'Vacant No Reservation Person', 'S-702');
 
-  const res = await reviewSubmission(submissionId, staffId);
+  assert.equal(res.statusCode, 409);
+  assert.match(res.payload.message, /no confirmed \(paid\) reservation/i);
+  assert.equal(await recordCountForName('Vacant No Reservation Person'), 0);
+});
 
-  assert.equal(res.statusCode, 200);
+test('a record with no plot reference publishes without any reservation', async () => {
+  const res = await createRecord(staffId, 'No Plot Person', null);
+
+  assert.equal(res.statusCode, 201);
   assert.equal(await recordCountForName('No Plot Person'), 1);
+});
+
+test('records require explicit verification authorization and a valid burial date', async () => {
+  const unauthorized = await createRecord(staffId, 'Unauthorized Person', null, { verified_authorized: false });
+  assert.equal(unauthorized.statusCode, 400);
+  assert.match(unauthorized.payload.message, /verification/i);
+  assert.equal(await recordCountForName('Unauthorized Person'), 0);
+
+  const badDate = await createRecord(staffId, 'Bad Burial Date Person', null, { burial_date: '2027-13-40' });
+  assert.equal(badDate.statusCode, 400);
+  assert.equal(await recordCountForName('Bad Burial Date Person'), 0);
+
+  const good = await createRecord(staffId, 'Scheduled Burial Person', null, { burial_date: '2027-03-01' });
+  assert.equal(good.statusCode, 201);
+  // pg returns DATE columns as JS Dates; normalize back to YYYY-MM-DD.
+  const storedBurialDate = good.payload.burial_date instanceof Date
+    ? good.payload.burial_date.toISOString().slice(0, 10)
+    : String(good.payload.burial_date);
+  assert.equal(storedBurialDate, '2027-03-01', 'the scheduled burial date must be stored');
+  assert.equal(await recordCountForName('Scheduled Burial Person'), 1);
 });
 
 test('the public held-plots list includes approved (awaiting cash) reservations', async () => {
@@ -270,9 +294,8 @@ test("cancelling an 'approved' reservation succeeds; cancelling a 'confirmed' on
 });
 
 test('editing a record onto a plot without a paid reservation is refused', async () => {
-  const submissionId = await insertSubmission(customerId, 'Edit Gate Person', null);
-  const approved = await reviewSubmission(submissionId, staffId);
-  assert.equal(approved.statusCode, 200);
+  const created = await createRecord(staffId, 'Edit Gate Person', null);
+  assert.equal(created.statusCode, 201);
   const recordRows = await db.query('SELECT id, grave_reference FROM burial_records WHERE full_name = $1', ['Edit Gate Person']);
   assert.equal(recordRows.rows.length, 1);
   const recordId = recordRows.rows[0].id;
@@ -305,10 +328,9 @@ test('editing a record onto a plot with a confirmed reservation succeeds and com
   const cash = await recordCash(reservationId, staffId);
   assert.equal(cash.statusCode, 201);
 
-  const submissionId = await insertSubmission(customerId, 'Edit Paid Person', null);
-  const approved = await reviewSubmission(submissionId, staffId);
-  assert.equal(approved.statusCode, 200);
-  const recordRows = await db.query('SELECT id FROM burial_records WHERE full_name = $1', ['Edit Paid Person']);
+  const created = await createRecord(staffId, 'Edit Paid Person', null);
+  assert.equal(created.statusCode, 201);
+  const recordRows = await db.query('SELECT id, grave_reference FROM burial_records WHERE full_name = $1', ['Edit Paid Person']);
   const recordId = recordRows.rows[0].id;
 
   const res = createResponse();
@@ -333,15 +355,26 @@ test('editing a record onto a plot with a confirmed reservation succeeds and com
   assert.equal(await reservationStatus(reservationId), 'completed');
 });
 
-test('the direct record-creation endpoints and controller function were removed', () => {
-  assert.equal(adminController.createRecord, undefined, 'adminController must not export createRecord');
+test('the walk-in creation endpoints are registered and the submissions flow is gone', () => {
+  assert.equal(typeof adminController.createRecord, 'function', 'adminController must export createRecord');
   for (const router of [adminRouter, staffRouter]) {
     const methods = routeMethods(router, '/records');
-    assert.ok(!methods.includes('post'), 'POST /records must no longer be registered');
+    assert.ok(methods.includes('post'), 'POST /records must be registered for walk-in creation');
     assert.ok(methods.includes('get'), 'GET /records must stay');
     assert.ok(routeMethods(router, '/records/:id').includes('put'), 'PUT /records/:id must stay');
     assert.ok(routeMethods(router, '/records/:id').includes('delete'), 'DELETE /records/:id must stay');
   }
+});
+
+test('the submissions endpoints, controller, and route file were removed', () => {
+  assert.throws(
+    () => require('../controllers/submissionController'),
+    'the submission controller must no longer exist'
+  );
+  assert.throws(
+    () => require('../routes/submissions'),
+    'the submissions router must no longer exist'
+  );
 });
 
 test('a memorial-site reservation can be reviewed, paid, and confirmed', async () => {

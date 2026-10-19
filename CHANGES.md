@@ -1,5 +1,17 @@
 # Security and correctness fixes
 
+## Walk-in only: submission flow removed, direct record creation restored
+- The municipality operates walk-in only (no customer accounts), so the customer-submission → staff-review flow is gone: `routes/submissions.js`, `controllers/submissionController.js`, all four `/api/submissions` endpoints, the frontend `submissionAPI`, the `/submit-record` page, and the AdminPortal Submissions queue and routes (`/admin/submissions`, `/staff/submissions`) were deleted. This supersedes the four-eyes self-review rule below and the earlier "Enforced submission-to-record workflow" policy, which the real deployment model did not fit.
+- `POST /api/admin/records` and `POST /api/staff/records` are restored (`createRecord` in `adminController`, shared by both routers): staff/admin encode records directly at the counter. Every creation still requires a `verified_authorized` confirmation, and the money gate stays: assigning a plot requires that plot's reservation to be `confirmed` (cash recorded) — publishing completes the reservation — and a vacant plot with no reservation refuses with 409, so no plot record exists before its cash is collected. Optional scheduled `burial_date` (YYYY-MM-DD) can be set on creation.
+- AdminPortal: the records view has an "+ Add Record (walk-in)" button and a creation form (name, grave reference, birth/death/burial dates, epitaph) with the same verification confirm dialog as editing; the dashboard's "Review Submissions" action became "Add Memorial Record" and the "Pending Submissions" stat is gone (the dashboard query no longer counts submissions).
+- Legacy data: the `burial_submissions` table remains in the schema and on the server's required-table check so historical rows stay readable, but nothing writes to it anymore.
+- Tests: workflow tests rewritten for direct creation — plot gates (pending 409 / awaiting-cash 409 / confirmed publishes and completes), vacant-plot-without-reservation 409 money gate, no-plot creation, verification + burial-date validation, POST /records registered on both routers, and the submissions controller/router files asserted gone. Backend suite: 47 passing.
+
+## Superseded: submissions review integrity
+- Added a four-eyes rule to `POST /api/submissions/:id/review`: the submitter can no longer review their own submission (403, "Ask another staff member or an administrator"). Since public registration is gone and staff encode walk-in customers' data, this makes the approving reviewer always a different person from the encoder. Review of other users' submissions is unchanged, and approval still refuses plot submissions whose reservation is not `confirmed`.
+- The `/submit-record` page is now reachable from the sidebar (admin and staff) as "New Memorial Record"; previously it existed only at its direct URL. The page is retitled "Add Memorial Record (for Review)" and the intro text explains the walk-in encoding → review → publish flow, including the cash gate for plot submissions.
+- Tests: new workflow test covers the self-review refusal (403, no record, submission stays pending) followed by another reviewer's successful approval.
+
 ## Policy change
 - Administrator self-service email reset is now enabled (`/admin/recovery` works like staff/user, 12-character minimum enforced server-side). The operator CLI reset remains as fallback. Demo-data system removed: `is_demo` columns dropped, purge-demo endpoint/CLI deleted, all records are real data.
 

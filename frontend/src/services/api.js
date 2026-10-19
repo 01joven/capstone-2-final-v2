@@ -72,13 +72,6 @@ export const reservationAPI = {
   reviewPlot: (id, action, note) => API.post(`/reservations/plots/${id}/review`, { action, note }),
 };
 
-export const submissionAPI = {
-  create: (data) => API.post('/submissions', data),
-  mine: () => API.get('/submissions/mine'),
-  all: () => API.get('/submissions/all'),
-  review: (id, action, note, burialDate) => API.post(`/submissions/${id}/review`, { action, note, burial_date: burialDate }),
-};
-
 export const favoriteAPI = {
   getAll: () => API.get('/favorites'),
   add: (memorial_id) => API.post('/favorites/add', { memorial_id }),
@@ -94,6 +87,7 @@ export const paymentAPI = {
 export const adminAPI = {
   getDashboard: () => API.get('/admin/dashboard'),
   getRecords: () => API.get('/admin/records'),
+  createRecord: (data) => API.post('/admin/records', data),
   updateRecord: (id, data) => API.put(`/admin/records/${id}`, data),
   deleteRecord: (id) => API.delete(`/admin/records/${id}`),
   getSites: () => API.get('/admin/sites'),
@@ -116,6 +110,7 @@ export const adminAPI = {
 export const staffAPI = {
   getDashboard: () => API.get('/staff/dashboard'),
   getRecords: () => API.get('/staff/records'),
+  createRecord: (data) => API.post('/staff/records', data),
   updateRecord: (id, data) => API.put(`/staff/records/${id}`, data),
   deleteRecord: (id) => API.delete(`/staff/records/${id}`),
   getSites: () => API.get('/staff/sites'),

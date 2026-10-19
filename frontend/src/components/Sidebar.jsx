@@ -11,8 +11,8 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
     { to: '/admin/dashboard', label: 'Dashboard', icon: '🏠' },
     { to: '/admin/records', label: 'Memorial Records', icon: '📋' },
     { to: '/admin/map', label: 'Cemetery Map / Plots', icon: '🗺️' },
+    { to: '/admin/records', label: 'Memorial Records', icon: '📋' },
     { to: '/admin/reservations', label: 'Reservations', icon: '📅' },
-    { to: '/admin/submissions', label: 'Submissions', icon: '📝' },
     { to: '/admin/reports', label: 'Reports', icon: '📈' },
     { to: '/admin/users', label: 'User Management', icon: '👥' },
     { to: '/payments', label: 'Cash Records', icon: '💵' },
@@ -22,8 +22,8 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
     { to: '/staff/dashboard', label: 'Dashboard', icon: '🏠' },
     { to: '/staff/records', label: 'Memorial Records', icon: '📋' },
     { to: '/staff/map', label: 'Cemetery Map / Plots', icon: '🗺️' },
+    { to: '/staff/records', label: 'Memorial Records', icon: '📋' },
     { to: '/staff/reservations', label: 'Reservations', icon: '📅' },
-    { to: '/staff/submissions', label: 'Submissions', icon: '📝' },
     { to: '/staff/reports', label: 'Reports', icon: '📈' },
     { to: '/payments', label: 'Cash Records', icon: '💵' },
   ];
@@ -100,6 +100,7 @@ const Sidebar = ({ isOpen = false, onClose = () => {} }) => {
             type="button"
             className="btn btn-outline sidebar-logout"
             onClick={() => {
+              if (!window.confirm('Do you want to log out?')) return;
               const target = user?.is_admin ? '/admin/login' : user?.is_staff ? '/staff/login' : '/';
               handleLinkClick();
               logout();

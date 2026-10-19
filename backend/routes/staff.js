@@ -4,6 +4,7 @@ const requireStaff = require('../middleware/staff');
 const {
   getDashboard,
   getRecords,
+  createRecord,
   updateRecord,
   deleteRecord,
   getReservations,
@@ -20,7 +21,8 @@ const router = express.Router();
 router.use(authMiddleware, requireStaff);
 router.get('/dashboard', getDashboard);
 router.get('/records', getRecords);
-// Records are created only by approving a submission (POST /records removed).
+// Walk-in model: staff/admin create records directly (no customer submissions).
+router.post('/records', createRecord);
 router.put('/records/:id', updateRecord);
 router.delete('/records/:id', deleteRecord);
 router.get('/sites', getAllMemorials);
