@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { paymentAPI, reservationAPI } from '../services/api';
@@ -12,10 +12,17 @@ const formatDate = (date) => {
   return Number.isNaN(parsed.getTime()) ? '—' : parsed.toLocaleDateString();
 };
 
+const formatDateTime = (date) => {
+  if (!date) return '—';
+  const parsed = new Date(date);
+  return Number.isNaN(parsed.getTime()) ? '—' : parsed.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+};
+
 const Payments = () => {
   const { user } = useAuth();
   const [payments, setPayments] = useState([]);
   const [unpaidReservations, setUnpaidReservations] = useState([]);
+  const [pendingReviewReservations, setPendingReviewReservations] = useState([]);
   const [searchParams] = useSearchParams();
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -37,14 +44,17 @@ const Payments = () => {
       setPayments(paymentResponse.data || []);
 
       const allReservations = reservationResponse.data || [];
-      // Cash queue: reservations not yet paid that are awaiting staff review
-      // (pending) or approved and awaiting cash payment. The office may record
-      // cash for either status; completed payments leave the queue.
+      // Cash queue: reservations that passed staff review and are awaiting
+      // cash payment. Pending ones belong to the Pendings review desk; once
+      // cash is recorded the reservation leaves the queue.
       const cashQueue = allReservations.filter(
-        (r) => (r.status === 'pending' || r.status === 'approved')
+        (r) => r.status === 'approved'
           && (!r.payment_status || r.payment_status !== 'completed')
       );
       setUnpaidReservations(cashQueue);
+
+      const awaitingReview = allReservations.filter((r) => r.status === 'pending');
+      setPendingReviewReservations(awaitingReview);
 
       const requestedReservationId = Number(searchParams.get('reservation'));
       if (requestedReservationId > 0 && !activePayingId) {
@@ -154,18 +164,62 @@ const Payments = () => {
         {error && <p className="error-msg" role="alert">{error}</p>}
         {message && <p className="success-msg" role="status">{message}</p>}
 
-        {/* Cash Queue: awaiting review or awaiting cash payment */}
+        {/* Reservations still under review — not payable yet */}
+        {pendingReviewReservations.length > 0 && (
+          <section className="cash-payments-section card" aria-labelledby="pending-review-title">
+            <h2 id="pending-review-title" className="section-title">
+              🕒 Reservations Awaiting Staff Review
+            </h2>
+            <p className="admin-provenance-note">
+              {(user?.is_staff || user?.is_admin)
+                ? 'These requests have not been reviewed yet. Approve them in Pendings first; cash can only be recorded after approval.'
+                : 'Your reservation is being reviewed by the cemetery office. Once approved, return here (or walk in at the office) to have the cash payment recorded and your official receipt issued.'}
+            </p>
+            <div className="unpaid-reservations-list">
+              {pendingReviewReservations.map((reservation) => (
+                <article key={reservation.id} className="unpaid-reservation-card">
+                  <div className="unpaid-info">
+                    <div className="unpaid-header">
+                      <span className="record-id">RES-{String(reservation.id).padStart(4, '0')}</span>
+                      <span className="badge badge-pending">Awaiting review</span>
+                    </div>
+                    <h3>
+                      {reservation.reservation_type === 'plot' || reservation.plot_section
+                        ? `Section ${reservation.plot_section}, Plot ${String(reservation.plot_number).padStart(2, '0')}`
+                        : reservation.memorial_name}
+                    </h3>
+                    <p>Family / Contact: <strong>{reservation.visitor_name}</strong></p>
+                    <p>Submitted: {formatDateTime(reservation.created_at)}</p>
+                    <p>Reservation Date: {formatDate(reservation.reservation_date)}</p>
+                  </div>
+                  {(user?.is_staff || user?.is_admin) && (
+                    <div className="unpaid-actions">
+                      <Link
+                        to={`${user.is_admin ? '/admin' : '/staff'}/pendings`}
+                        className="btn btn-outline"
+                      >
+                        Review in ⏳ Pendings
+                      </Link>
+                    </div>
+                  )}
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Cash Queue: approved, awaiting cash payment */}
         <section className="cash-payments-section card" aria-labelledby="cash-queue-title">
           <h2 id="cash-queue-title" className="section-title">
-            Plot Reservations (Awaiting Review or Cash Payment)
+            Plot Reservations (Awaiting Cash Payment)
           </h2>
           <p className="admin-provenance-note">
-            When a family member or representative walks in to pay for a plot reservation, verify the deceased person and plot spot, then record the cash payment to issue an official receipt and confirm the reservation. Rows marked "Awaiting review" have not been approved yet; cash may still be recorded for them.
+            These reservations were approved after staff review. When the family walks in to pay, verify the deceased person and plot spot, then record the cash payment to issue an official receipt and confirm the reservation.
           </p>
 
           {unpaidReservations.length === 0 ? (
             <p className="payment-empty">
-              {isLoading ? 'Checking reservations...' : 'No reservations are currently awaiting review or cash payment.'}
+              {isLoading ? 'Checking reservations...' : 'No reservations are currently awaiting cash payment.'}
             </p>
           ) : (
             <div className="unpaid-reservations-list">
@@ -196,6 +250,7 @@ const Payments = () => {
                         </p>
                       )}
                       <p>Family / Contact: <strong>{reservation.visitor_name}</strong> ({reservation.contact})</p>
+                      <p>Submitted: {formatDateTime(reservation.created_at)}</p>
                       <p>Reservation Date: {formatDate(reservation.reservation_date)}</p>
                       <p className="payment-amount">
                         Amount Due: ₱{Number(reservation.total_price || 0).toLocaleString()}

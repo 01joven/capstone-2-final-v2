@@ -152,7 +152,22 @@ const MapView = () => {
       setSelectedBurialId(burialId);
       setActiveView('plots');
     }
+    const siteId = Number(searchParams.get('siteId'));
+    if (Number.isSafeInteger(siteId) && siteId > 0) {
+      // Arriving from a memorial site ("Book Now"): open the sites view so the
+      // visitor can see the site and continue to a plot reservation.
+      setSelectedBurialId(null);
+      setActiveView('sites');
+    }
   }, [searchParams]);
+
+  // Once the site list is rendered, bring the requested site into view.
+  useEffect(() => {
+    const siteId = Number(searchParams.get('siteId'));
+    if (!Number.isSafeInteger(siteId) || siteId <= 0 || isLoading) return;
+    const cardElement = document.getElementById(`memorial-site-${siteId}`);
+    if (cardElement) cardElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [searchParams, isLoading, memorials]);
 
   const visibleBurials = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
@@ -619,7 +634,11 @@ const MapView = () => {
                     ? memorial.image_url
                     : fallbacks[memorial.id % fallbacks.length] || fallbacks[0];
                   return (
-                    <div key={memorial.id} className="memorial-site-card">
+                    <div
+                      id={`memorial-site-${memorial.id}`}
+                      key={memorial.id}
+                      className={`memorial-site-card ${Number(searchParams.get('siteId')) === memorial.id ? 'site-card-highlight' : ''}`}
+                    >
                       <div className="memorial-site-card-img-wrap">
                         <img
                           src={imgSrc}

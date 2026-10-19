@@ -2,6 +2,12 @@
   max-width: 1440px;
 }
 
+/* Deep-linked site card ("Book Now" → map?siteId=...) */
+.memorial-site-card.site-card-highlight {
+  outline: 2px solid #5a8a6e;
+  outline-offset: 2px;
+}
+
 .map-view-tabs {
   display: flex;
   gap: 12px;

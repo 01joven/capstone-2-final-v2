@@ -30,7 +30,7 @@ const MemorialCard = ({ memorial, onSave, isSaved, isSaving = false, showReserve
               </button>
             )}
             {showReserve ? (
-              <Link to={`/reservations/${memorial.id}`} className="btn btn-primary">
+              <Link to={`/map?siteId=${memorial.id}`} className="btn btn-primary">
                 Book Now
               </Link>
             ) : (

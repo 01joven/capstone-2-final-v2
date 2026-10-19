@@ -41,6 +41,7 @@ function App() {
         <Route path="/admin/records" element={<AdminRoute><AdminPortal /></AdminRoute>} />
         <Route path="/admin/map" element={<AdminRoute><MapView /></AdminRoute>} />
         <Route path="/admin/reservations" element={<AdminRoute><AdminPortal /></AdminRoute>} />
+        <Route path="/admin/pendings" element={<AdminRoute><AdminPortal /></AdminRoute>} />
         <Route path="/admin/reports" element={<AdminRoute><AdminPortal /></AdminRoute>} />
         <Route path="/admin/users" element={<AdminRoute><AdminPortal /></AdminRoute>} />
         <Route path="/admin/security" element={<Navigate to="/admin/dashboard" replace />} />
@@ -49,6 +50,7 @@ function App() {
         <Route path="/staff/records" element={<StaffRoute><AdminPortal scope="staff" /></StaffRoute>} />
         <Route path="/staff/map" element={<StaffRoute><MapView /></StaffRoute>} />
         <Route path="/staff/reservations" element={<StaffRoute><AdminPortal scope="staff" /></StaffRoute>} />
+        <Route path="/staff/pendings" element={<StaffRoute><AdminPortal scope="staff" /></StaffRoute>} />
         <Route path="/staff/reports" element={<StaffRoute><AdminPortal scope="staff" /></StaffRoute>} />
         <Route path="*" element={<NotFound />} />
       </Routes>

@@ -12,6 +12,13 @@ const formatDate = (date) => {
   return Number.isNaN(parsed.getTime()) ? '—' : parsed.toLocaleDateString();
 };
 
+// Submission timestamp of a reservation (created_at from the database).
+const formatDateTime = (date) => {
+  if (!date) return '—';
+  const parsed = new Date(date);
+  return Number.isNaN(parsed.getTime()) ? '—' : parsed.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+};
+
 // Display identifier used across the records view, delete confirmations and dialogs.
 const mrLabel = (record) => `MR-${String(record.id).padStart(4, '0')}`;
 
@@ -70,6 +77,7 @@ const AdminPortal = ({ scope = 'admin' }) => {
     dashboard: api.getDashboard,
     records: api.getRecords,
     reservations: api.getReservations,
+    pendings: () => api.getReservations({ status: 'pending' }),
     reports: api.getReports,
     users: api.getUsers,
   };
@@ -211,7 +219,8 @@ const AdminPortal = ({ scope = 'admin' }) => {
             <SitesManager api={api} />
           </>
         )}
-        {ready && view === 'reservations' && <Reservations reservations={data} onUpdated={refresh} />}
+        {ready && view === 'reservations' && <Reservations reservations={data} scope={scope} onUpdated={refresh} />}
+        {ready && view === 'pendings' && <Reservations reservations={data} scope={scope} pendingsOnly onUpdated={refresh} />}
         {ready && view === 'reports' && <Reports report={data} scope={scope} />}
         {ready && view === 'users' && <Users users={data} onCreated={refresh} />}
       </div>
@@ -240,7 +249,7 @@ const Dashboard = ({ data, scope = 'admin' }) => {
   const cards = [
     ['Memorial Records', data?.records ?? 0, `${base}/records`],
     ['Reservations', data?.reservations ?? 0, `${base}/reservations`],
-    ['Pending Reservations', data?.pending_reservations ?? 0, `${base}/reservations`],
+    ['Pending Reservations', data?.pending_reservations ?? 0, `${base}/pendings`],
     ...(scope === 'staff' ? [] : [['Staff Accounts', data?.users ?? 0, '/admin/users']]),
     ['Cash Payments & Receipts', data?.pending_payments ?? 0, '/payments'],
   ];
@@ -646,21 +655,24 @@ const SitesManager = ({ api }) => {
   );
 };
 
-const Reservations = ({ reservations, onUpdated }) => {
+const Reservations = ({ reservations, pendingsOnly = false, scope = 'admin', onUpdated }) => {
   const [reviewingId, setReviewingId] = useState(null);
   const [cancellingId, setCancellingId] = useState(null);
-  const [confirmingId, setConfirmingId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
-  const [notes, setNotes] = useState({});
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const base = scope === 'staff' ? '/staff' : '/admin';
+
+  const visibleReservations = pendingsOnly
+    ? (reservations || []).filter((reservation) => reservation.status === 'pending')
+    : reservations || [];
 
   const reviewPlot = async (reservation, action) => {
     setReviewingId(reservation.id);
     setError('');
     setMessage('');
     try {
-      const { data } = await reservationAPI.reviewPlot(reservation.id, action, notes[reservation.id] || undefined);
+      const { data } = await reservationAPI.reviewPlot(reservation.id, action);
       setMessage(data.message);
       onUpdated();
     } catch (reviewError) {
@@ -686,22 +698,6 @@ const Reservations = ({ reservations, onUpdated }) => {
     }
   };
 
-  const confirmEntry = async (reservation) => {
-    if (!window.confirm(`Confirm reservation for ${reservation.visitor_name}? This bypasses cash recording.`)) return;
-    setConfirmingId(reservation.id);
-    setError('');
-    setMessage('');
-    try {
-      const { data } = await reservationAPI.confirm(reservation.id);
-      setMessage(data.message);
-      onUpdated();
-    } catch (confirmError) {
-      setError(confirmError.response?.data?.message || 'Could not confirm this reservation.');
-    } finally {
-      setConfirmingId(null);
-    }
-  };
-
   const deleteEntry = async (reservation) => {
     if (!window.confirm(`Delete reservation for ${reservation.visitor_name}? This cannot be undone.`)) return;
     setDeletingId(reservation.id);
@@ -720,17 +716,23 @@ const Reservations = ({ reservations, onUpdated }) => {
 
   return (
     <>
-      <h1 className="page-title">Reservations</h1>
-      <p className="admin-provenance-note">
-        Plot reservations hold burial spots for the deceased. Requests await staff review here; once approved, payment is collected via Walk-in Cash at the cemetery office, issuing an official receipt and confirming the spot on the map.
-      </p>
+      <h1 className="page-title">{pendingsOnly ? 'Pending Reservations' : 'Reservations'}</h1>
+      {pendingsOnly ? (
+        <p className="admin-provenance-note">
+          Reservations submitted by families that are still awaiting your review. Approve to hold the spot, or reject with a note for the family.
+        </p>
+      ) : (
+        <p className="admin-provenance-note">
+          Plot reservations hold burial spots for the deceased. Requests await staff review here; once approved, payment is collected via Walk-in Cash at the cemetery office, issuing an official receipt and confirming the spot on the map.
+        </p>
+      )}
       {error && <p className="error-msg" role="alert">{error}</p>}
       {message && <p className="success-msg" role="status">{message}</p>}
       <div className="admin-table-wrap card">
         <table className="admin-table">
-          <thead><tr><th>Family Representative</th><th>Deceased &amp; Spot</th><th>Date</th><th>Payment</th><th>Status</th><th>Total</th><th>Review</th></tr></thead>
+          <thead><tr><th>Family Representative</th><th>Deceased &amp; Spot</th><th>Reservation Date</th><th>Submitted</th><th>Payment</th><th>Status</th><th>Total</th><th>Review</th></tr></thead>
           <tbody>
-            {(reservations || []).map((reservation) => {
+            {visibleReservations.map((reservation) => {
               const isPlot = reservation.reservation_type === 'plot';
               const isPaid = reservation.payment_status === 'completed' || reservation.status === 'confirmed';
               const statusMeta = reservationStatusMeta(reservation.status);
@@ -744,6 +746,7 @@ const Reservations = ({ reservations, onUpdated }) => {
                       : reservation.memorial_name}
                   </td>
                   <td>{formatDate(reservation.reservation_date)}</td>
+                  <td>{formatDateTime(reservation.created_at)}</td>
                   <td>
                     {isPaid ? (
                       <span className="admin-status verified">Paid Cash</span>
@@ -762,38 +765,23 @@ const Reservations = ({ reservations, onUpdated }) => {
                   <td><span className={`admin-status ${statusMeta.tone}`}>{statusMeta.label}</span></td>
                   <td>₱{Number(reservation.total_price || 0).toLocaleString()}</td>
                   <td>
-                    {reservation.status === 'pending' ? (
+                    {reservation.status === 'pending' ? (pendingsOnly ? (
                       <div className="admin-form-actions">
-                        <input
-                          type="text"
-                          maxLength={500}
-                          placeholder="Note for family (optional)"
-                          aria-label="Note for family"
-                          value={notes[reservation.id] || ''}
-                          onChange={(event) => setNotes({ ...notes, [reservation.id]: event.target.value })}
-                        />
                         <button type="button" className="btn btn-primary" disabled={reviewingId === reservation.id} onClick={() => reviewPlot(reservation, 'approve')}>
                           {reviewingId === reservation.id ? 'Saving...' : 'Approve'}
-                        </button>
-                        <button type="button" className="btn btn-primary" disabled={confirmingId === reservation.id} onClick={() => confirmEntry(reservation)}>
-                          {confirmingId === reservation.id ? 'Confirming...' : 'Confirm'}
                         </button>
                         <button type="button" className="btn btn-outline" disabled={reviewingId === reservation.id} onClick={() => reviewPlot(reservation, 'reject')}>
                           Reject
                         </button>
-                        <button type="button" className="btn btn-outline" disabled={cancellingId === reservation.id} onClick={() => cancelEntry(reservation)}>
-                          {cancellingId === reservation.id ? 'Cancelling...' : 'Cancel'}
-                        </button>
                       </div>
-                    ) : reservation.status === 'approved' ? (
+                    ) : (
+                      <small><Link to={`${base}/pendings`}>Review in ⏳ Pendings</Link></small>
+                    )) : reservation.status === 'approved' ? (
                       <>
-                        <small>Cash is recorded in <Link to="/payments">Payments (Cash Records)</Link>.</small>
+                        <small>Cash is recorded in <Link to="/payments">Cash Records</Link>.</small>
                         <div className="admin-form-actions">
-                          <button type="button" className="btn btn-primary" disabled={confirmingId === reservation.id} onClick={() => confirmEntry(reservation)}>
-                            {confirmingId === reservation.id ? 'Confirming...' : 'Confirm'}
-                          </button>
-                          <button type="button" className="btn btn-outline" disabled={deletingId === reservation.id} onClick={() => deleteEntry(reservation)}>
-                            {deletingId === reservation.id ? 'Deleting...' : 'Delete'}
+                          <button type="button" className="btn btn-outline" disabled={cancellingId === reservation.id} onClick={() => cancelEntry(reservation)}>
+                            {cancellingId === reservation.id ? 'Cancelling...' : 'Cancel'}
                           </button>
                         </div>
                       </>
@@ -806,7 +794,9 @@ const Reservations = ({ reservations, onUpdated }) => {
                 </tr>
               );
             })}
-            {(reservations || []).length === 0 && <tr><td colSpan="7">No reservations have been submitted.</td></tr>}
+            {visibleReservations.length === 0 && (
+              <tr><td colSpan="8">{pendingsOnly ? 'No reservations are awaiting review.' : 'No reservations have been submitted.'}</td></tr>
+            )}
           </tbody>
         </table>
       </div>

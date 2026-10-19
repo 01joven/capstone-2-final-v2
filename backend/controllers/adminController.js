@@ -309,9 +309,16 @@ const deleteRecord = async (req, res) => {
 
 const getReservations = async (req, res) => {
   try {
+    // Optional ?status= filter (e.g. 'pending') powers the dedicated
+    // Pendings view; the unfiltered listing stays the default.
+    const allowedStatuses = ['pending', 'approved', 'confirmed', 'completed', 'rejected', 'cancelled'];
+    const statusFilter = allowedStatuses.includes(String(req.query.status || '').toLowerCase())
+      ? String(req.query.status).toLowerCase()
+      : null;
+    const params = statusFilter ? [statusFilter] : [];
     const result = await pool.query(
       `SELECT r.id, r.visitor_name, r.deceased_name, r.contact, r.reservation_date, r.status, r.total_price,
-              r.plot_section, r.plot_number, r.review_note, c.name AS cemetery_name,
+              r.plot_section, r.plot_number, r.review_note, r.created_at, c.name AS cemetery_name,
               CASE WHEN r.plot_section IS NOT NULL THEN 'plot' ELSE 'memorial' END AS reservation_type,
               u.name AS account_name, u.email AS account_email, m.name AS memorial_name,
               (SELECT p.payment_status FROM payments p
@@ -332,7 +339,9 @@ const getReservations = async (req, res) => {
        JOIN users u ON u.id = r.user_id
        LEFT JOIN memorials m ON m.id = r.memorial_id
        LEFT JOIN cemeteries c ON c.id = r.cemetery_id
-       ORDER BY r.created_at DESC`
+       ${statusFilter ? 'WHERE r.status = $1' : ''}
+       ORDER BY r.created_at DESC`,
+      params
     );
     res.json(result.rows);
   } catch (error) {

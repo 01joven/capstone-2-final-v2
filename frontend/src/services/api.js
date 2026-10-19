@@ -67,7 +67,6 @@ export const reservationAPI = {
   getPlotReservations: () => API.get('/reservations/plots'),
   create: (data) => API.post('/reservations/create', data),
   cancel: (id) => API.post(`/reservations/${id}/cancel`),
-  confirm: (id) => API.post(`/reservations/${id}/confirm`),
   remove: (id) => API.delete(`/reservations/${id}`),
   reviewPlot: (id, action, note) => API.post(`/reservations/plots/${id}/review`, { action, note }),
 };
@@ -93,7 +92,7 @@ export const adminAPI = {
   getSites: () => API.get('/admin/sites'),
   createSite: (data) => API.post('/admin/sites', data),
   updateSite: (id, data) => API.put(`/admin/sites/${id}`, data),
-  getReservations: () => API.get('/admin/reservations'),
+  getReservations: (params) => API.get('/admin/reservations', { params }),
   getReports: () => API.get('/admin/reports'),
   getCollections: (params) => API.get('/admin/collections', { params }),
   getSettlements: () => API.get('/admin/settlements'),
@@ -116,7 +115,7 @@ export const staffAPI = {
   getSites: () => API.get('/staff/sites'),
   createSite: (data) => API.post('/staff/sites', data),
   updateSite: (id, data) => API.put(`/staff/sites/${id}`, data),
-  getReservations: () => API.get('/staff/reservations'),
+  getReservations: (params) => API.get('/staff/reservations', { params }),
   getReports: () => API.get('/staff/reports'),
   getCollections: (params) => API.get('/staff/collections', { params }),
 };

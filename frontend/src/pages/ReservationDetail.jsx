@@ -12,6 +12,12 @@ const formatDate = (date) => {
   return Number.isNaN(parsed.getTime()) ? '—' : parsed.toLocaleDateString();
 };
 
+const formatDateTime = (date) => {
+  if (!date) return '—';
+  const parsed = new Date(date);
+  return Number.isNaN(parsed.getTime()) ? '—' : parsed.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+};
+
 // Reservation status machine (customer view):
 // pending = awaiting staff review · approved = awaiting cash payment ·
 // confirmed = cash recorded (receipt issued) · completed = burial record published.
@@ -281,6 +287,7 @@ const ReservationsList = () => {
               ? `Section ${r.plot_section}, Plot ${String(r.plot_number).padStart(2, '0')}`
               : r.memorial_name;
             const isPaid = r.payment_status === 'completed' || r.status === 'confirmed';
+            const isPendingReview = r.status === 'pending';
             const isAwaitingMoney = r.status === 'pending' || r.status === 'approved';
             const badge = reservationStatusBadge(r);
 
@@ -303,6 +310,7 @@ const ReservationsList = () => {
                   )}
 
                   <p>Family Contact: <strong>{r.visitor_name}</strong> ({r.contact})</p>
+                  <p>Submitted: {formatDateTime(r.created_at)}</p>
                   <p>Date: {formatDate(r.reservation_date)}</p>
                   <p>
                     <strong>Payment: </strong>
@@ -318,10 +326,15 @@ const ReservationsList = () => {
                   {r.review_note && <p><small>Staff note: {r.review_note}</small></p>}
 
                   <div className="reservation-item-actions">
-                    {isAwaitingMoney && (
+                    {r.status === 'approved' && (
                       <Link to={`/payments?reservation=${r.id}`} className="btn btn-primary">
                         💵 Record Cash Payment
                       </Link>
+                    )}
+                    {isPendingReview && (
+                      <p className="reservation-review-waiting">
+                        <small>Under review at the cemetery office. Cash is collected after approval.</small>
+                      </p>
                     )}
                     {(r.status === 'pending' || r.status === 'approved') && (
                       <button

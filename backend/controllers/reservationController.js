@@ -317,49 +317,6 @@ const reviewPlotReservation = async (req, res) => {
   }
 };
 
-const confirmReservation = async (req, res) => {
-  const reservationId = Number(req.params.id);
-  if (!Number.isSafeInteger(reservationId) || reservationId < 1) {
-    return res.status(400).json({ message: 'A valid reservation ID is required.' });
-  }
-
-  let client;
-  let transactionStarted = false;
-  try {
-    client = await pool.connect();
-    await client.query('BEGIN');
-    transactionStarted = true;
-
-    const result = await client.query('SELECT id, status FROM reservations WHERE id = $1 FOR UPDATE', [reservationId]);
-    const reservation = result.rows[0];
-    if (!reservation) {
-      await client.query('ROLLBACK');
-      transactionStarted = false;
-      return res.status(404).json({ message: 'Reservation not found.' });
-    }
-    if (!['pending', 'approved'].includes(reservation.status)) {
-      await client.query('ROLLBACK');
-      transactionStarted = false;
-      return res.status(409).json({ message: 'Only pending or approved reservations can be confirmed.' });
-    }
-
-    await client.query("UPDATE reservations SET status = 'confirmed' WHERE id = $1", [reservationId]);
-    await client.query('COMMIT');
-    transactionStarted = false;
-    res.json({ message: 'Reservation confirmed.', status: 'confirmed' });
-  } catch (error) {
-    if (transactionStarted) {
-      await client.query('ROLLBACK').catch((rollbackError) => {
-        console.error('Confirm reservation rollback error:', rollbackError);
-      });
-    }
-    console.error('Confirm reservation error:', error);
-    res.status(500).json({ message: 'Unable to confirm reservation.' });
-  } finally {
-    if (client) client.release();
-  }
-};
-
 const cancelReservation = async (req, res) => {
   const reservationId = Number(req.params.id);
   if (!Number.isSafeInteger(reservationId) || reservationId < 1) {
@@ -473,4 +430,4 @@ const deleteReservation = async (req, res) => {
   }
 };
 
-module.exports = { getUserReservations, getPlotReservations, createReservation, reviewPlotReservation, cancelReservation, confirmReservation, deleteReservation };
+module.exports = { getUserReservations, getPlotReservations, createReservation, reviewPlotReservation, cancelReservation, deleteReservation };

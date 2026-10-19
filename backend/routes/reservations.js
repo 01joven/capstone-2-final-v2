@@ -9,7 +9,6 @@ const {
   createReservation,
   reviewPlotReservation,
   cancelReservation,
-  confirmReservation,
   deleteReservation,
 } = require('../controllers/reservationController');
 
@@ -19,7 +18,6 @@ router.get('/plots', authMiddleware, authenticatedLimit, getPlotReservations);
 router.get('/user-reservations', authMiddleware, authenticatedLimit, getUserReservations);
 router.post('/create', authMiddleware, authenticatedLimit, createReservation);
 router.post('/:id/cancel', authMiddleware, authenticatedLimit, cancelReservation);
-router.post('/:id/confirm', authMiddleware, requireStaff, authenticatedLimit, confirmReservation);
 router.delete('/:id', authMiddleware, adminMiddleware, authenticatedLimit, deleteReservation);
 router.post('/plots/:id/review', authMiddleware, requireStaff, authenticatedLimit, reviewPlotReservation);
 
